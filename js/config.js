@@ -34,7 +34,7 @@ window.CONFIG = {
 
   // From Google Cloud -> Credentials -> OAuth client (Web application).
   // See README step 2.
-  googleClientId: "PASTE_YOUR_WEB_CLIENT_ID_HERE.apps.googleusercontent.com",
+  googleClientId: "312332218243-3q5a4710p7t78aj3k1k381g825fv18a0.apps.googleusercontent.com",
 
   // Google Drive folder where full-resolution photo backups are kept.
   driveFolderName: "Mileage Tracker Photos",
