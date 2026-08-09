@@ -44,6 +44,12 @@ export default async function EntitiesPage({
           Synced <b>{params.synced}</b>: {params.accounts} accounts, {params.txns} transactions pulled.
         </div>
       )}
+      {params.demoCleared && (
+        <div className="callout">
+          Removed {params.demoCleared} demo transactions ({params.scope === "all" ? "all entities" : params.scope}).
+          Real synced data was not touched.
+        </div>
+      )}
 
       <div className="callout">
         {configured ? (
@@ -106,6 +112,29 @@ export default async function EntitiesPage({
           ))}
         </tbody>
       </table>
+
+      <h2>Going live</h2>
+      <div className="card">
+        <p className="small">
+          Entities start with <b>demo books</b> so you can explore. When you connect an entity to
+          QuickBooks, its demo data is replaced automatically on first sync. For entities that
+          won&apos;t be connected (or when you&apos;re ready to run fully real), clear the remaining demo
+          data so combined reports and strategy estimates only reflect reality.
+        </p>
+        <form className="toolbar" action="/api/entities/clear-demo" method="post" style={{ marginBottom: 0 }}>
+          <select name="entity" defaultValue="all">
+            <option value="all">All entities</option>
+            {entities.map((e) => (
+              <option key={e.slug} value={e.slug}>{e.name}</option>
+            ))}
+          </select>
+          <button className="btn danger" type="submit">Clear demo data</button>
+          <span className="xsmall mut">
+            Removes demo transactions only — QuickBooks data, mileage, receipts, and your settings
+            are never touched. To get demo data back: <code>npm run seed</code>.
+          </span>
+        </form>
+      </div>
 
       <p className="disclaimer">
         This app only reads from QuickBooks — it never writes back, so it can never change your

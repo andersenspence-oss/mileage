@@ -292,9 +292,12 @@ async function main() {
   }
   console.log(`  ${STRATEGY_LIBRARY.length} strategies seeded`);
 
-  // starter intake profile — SandCastle roles deliberately marked unconfirmed
-  await prisma.intakeProfile.create({
-    data: {
+  // starter intake profile — SandCastle roles deliberately marked unconfirmed.
+  // upsert with a no-op update: reseeding never overwrites answers you saved.
+  await prisma.intakeProfile.upsert({
+    where: { id: "main" },
+    update: {},
+    create: {
       id: "main",
       dataJson: JSON.stringify({
         owner: { state: "UT", filingStatus: "married_joint", fedMarginalRate: 0.32 },
@@ -330,7 +333,11 @@ async function main() {
   await prisma.checklistItem.createMany({ data: items.map((label, i) => ({ month: mk, label, sort: i })) });
 
   // store assumption defaults in settings for visibility
-  await prisma.setting.create({ data: { key: "assumptions", value: JSON.stringify(ASSUMPTIONS) } });
+  await prisma.setting.upsert({
+    where: { key: "assumptions" },
+    update: { value: JSON.stringify(ASSUMPTIONS) },
+    create: { key: "assumptions", value: JSON.stringify(ASSUMPTIONS) },
+  });
 
   const txCount = await prisma.transaction.count();
   console.log(`Done. ${txCount} total transactions across ${ENTITIES.length} entities.`);
