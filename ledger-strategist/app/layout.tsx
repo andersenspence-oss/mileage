@@ -23,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/review">Review Queue</Link>
             <Link href="/flags">Anomaly Flags</Link>
             <Link href="/reports">Reports</Link>
+            <Link href="/mileage">Mileage &amp; Vehicles</Link>
             <div className="navsec">Tax Strategy</div>
             <Link href="/intake">Situation Intake</Link>
             <Link href="/strategies">Strategy Library</Link>

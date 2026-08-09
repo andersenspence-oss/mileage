@@ -112,6 +112,12 @@ never mess up your books.
   personal-vs-business mix-ups.
 - **Reports** — P&L, Balance Sheet, Cash Flow for any date range, per entity or
   combined. Print to PDF or download CSV.
+- **Mileage & Vehicles** — a live feed from the Mileage Log phone app you and
+  Carey use. Connect it once (instructions on the page: publish your mileage
+  Google Sheet as a CSV link, or just upload the app's CSV export) and the tax
+  strategy engine uses your real logged miles and per-trip IRS rates instead
+  of estimates. Trip categories map straight onto your entities, and receipt
+  photo links come along for the ride.
 - **Situation Intake** — the one-time questionnaire that powers the strategy
   engine. Update it whenever life changes.
 - **Strategy Library** — the playbook of tax strategies. You can add your own.

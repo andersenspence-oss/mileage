@@ -168,3 +168,28 @@ model Setting {
   key   String @id
   value String
 }
+
+// Trips imported from the Mileage Log app (Google Sheet / CSV export).
+// entitySlug is mapped from the trip's Category; null = personal or
+// unassigned business ("Misc. Business").
+model MileageTrip {
+  id              String   @id @default(cuid())
+  entryId         String?  @unique // "Entry ID" from the mileage app when present
+  date            DateTime
+  category        String
+  entitySlug      String?
+  business        Boolean
+  miles           Float
+  ratePerMile     Float?
+  deduction       Float?
+  vehicle         String?
+  driver          String?
+  businessPurpose String?
+  fuelTotal       Float?
+  receiptPhoto    String?
+  notes           String?
+  importedAt      DateTime @default(now())
+
+  @@index([date])
+  @@index([entitySlug])
+}

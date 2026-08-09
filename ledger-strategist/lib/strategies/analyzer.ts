@@ -7,6 +7,7 @@
 import { ASSUMPTIONS, combinedIncomeRate } from "../assumptions";
 import type { Intake } from "../intake";
 import type { EntityBooks } from "./books";
+import type { MileageSummary } from "../mileage";
 
 export type TraceStep = { label: string; value?: number; note?: string };
 
@@ -21,6 +22,8 @@ export type EvalResult = {
 export type AnalyzerContext = {
   intake: Intake;
   books: EntityBooks[];
+  // Real logged trips from the Mileage Log app, when synced. Beats estimates.
+  mileage?: MileageSummary;
 };
 
 const r0 = (n: number) => Math.round(n);
@@ -286,29 +289,45 @@ export const EVALUATORS: Record<string, Evaluator> = {
   },
 
   vehicle_strategy(ctx) {
-    const miles = ctx.intake.vehicles.businessMilesPerYear;
     const autoSpend = ctx.books.reduce((s, b) => s + b.autoFuelSpend, 0);
-    if (miles <= 0 && autoSpend < 500) {
-      return { relevant: false, estimatedSavings: 0, summary: "No business mileage in the intake and minimal auto spend in the books.", trace: [], cpaChecklist: [] };
-    }
     const rate = combinedIncomeRate(ctx.intake.owner.fedMarginalRate);
     const mileageRate = ASSUMPTIONS.mileage_rate.value;
-    const deduction = miles * mileageRate;
+    const logged = ctx.mileage && ctx.mileage.tripCount12 > 0 ? ctx.mileage : null;
+
+    // Prefer the real mileage log (synced from the phone app) over the
+    // intake estimate — actual trips, actual dated IRS rates, IRS-defensible.
+    const miles = logged ? logged.businessMiles12 : ctx.intake.vehicles.businessMilesPerYear;
+    const deduction = logged ? logged.loggedDeduction12 : miles * mileageRate;
+    if (miles <= 0 && autoSpend < 500) {
+      return { relevant: false, estimatedSavings: 0, summary: "No business mileage logged or estimated, and minimal auto spend in the books. Sync the Mileage & Vehicles page if you're tracking trips on your phone.", trace: [], cpaChecklist: [] };
+    }
     const savings = deduction * rate;
+    const trace: TraceStep[] = [
+      ...rateStep(ctx.intake),
+      logged
+        ? { label: `Business miles, last 12 months — from your mileage log (${logged.tripCount12} trips)`, value: miles, note: "Actual contemporaneous log — the strongest documentation" }
+        : { label: "Business miles per year (intake estimate)", value: miles, note: "Sync your mileage app on the Mileage & Vehicles page to replace this estimate with real trips" },
+      logged
+        ? { label: "Deduction as logged (each trip at that date's IRS rate)", value: r0(deduction) }
+        : { label: `Deduction at the IRS standard rate (${mileageRate.toFixed(2)}/mile)`, value: r0(deduction), note: "VERIFY current-year rate" },
+      { label: "Auto/fuel already expensed in books (12 mo)", value: r0(autoSpend), note: "Can't double-dip: the mileage method replaces actual fuel/repair costs — one method per vehicle" },
+    ];
+    if (logged && logged.fuelTotal12 > 0) {
+      trace.push({ label: "Fuel receipts captured in the mileage app (12 mo)", value: r0(logged.fuelTotal12), note: "Evidence for the actual-expense method if your CPA prefers it for a vehicle" });
+    }
+    trace.push({ label: "Estimated annual savings (mileage method)", value: r0(savings) });
     return {
       relevant: true, estimatedSavings: r0(savings),
-      summary: `${miles.toLocaleString()} business miles × ${mileageRate.toFixed(2)}/mile ≈ ${usd0(deduction)} deduction${autoSpend > 0 ? ` (the books already show ${usd0(autoSpend)} of auto/fuel spend — pick ONE method per vehicle)` : ""}.`,
-      trace: [
-        ...rateStep(ctx.intake),
-        { label: "Business miles per year (intake)", value: miles },
-        { label: "IRS standard mileage rate", value: mileageRate, note: "VERIFY current-year rate" },
-        { label: "Mileage deduction", value: r0(deduction) },
-        { label: "Auto/fuel already expensed in books (12 mo)", value: r0(autoSpend), note: "Can't double-dip: mileage method replaces actual fuel costs" },
-        { label: "Estimated annual savings (mileage method)", value: r0(savings) },
-      ],
+      summary: logged
+        ? `Your mileage log shows ${miles.toLocaleString()} business miles over the last 12 months — a ${usd0(deduction)} deduction already documented trip-by-trip${autoSpend > 500 ? `. Watch the ${usd0(autoSpend)} of fuel/auto spend in the books: mileage method and actual-expense method can't both be used on the same vehicle` : ""}.`
+        : `${miles.toLocaleString()} estimated business miles ≈ ${usd0(deduction)} deduction${autoSpend > 0 ? ` (the books already show ${usd0(autoSpend)} of auto/fuel spend — pick ONE method per vehicle)` : ""}.`,
+      trace,
       cpaChecklist: [
-        "Keep a contemporaneous mileage log (app-based is fine).",
+        logged
+          ? "Your phone app's log is contemporaneous — export the year's CSV for the tax file."
+          : "Keep a contemporaneous mileage log (your phone app does this — sync it in).",
         "CPA picks mileage vs. actual-expense method per vehicle.",
+        ...(logged && autoSpend > 500 ? ["Reconcile: fuel/auto costs expensed in the books must be backed out for any vehicle using the mileage method."] : []),
         ctx.intake.vehicles.heavyVehicle
           ? "Heavy vehicle flagged: evaluate §179/bonus if business use >50% — big first-year deduction possible."
           : "If you buy a >6,000 lb GVWR vehicle for the business, revisit — large first-year write-offs may apply.",
