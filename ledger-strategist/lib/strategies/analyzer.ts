@@ -8,6 +8,7 @@ import { ASSUMPTIONS, combinedIncomeRate } from "../assumptions";
 import type { Intake } from "../intake";
 import type { EntityBooks } from "./books";
 import type { MileageSummary } from "../mileage";
+import type { PerDiemSummary } from "../perdiem";
 
 export type TraceStep = { label: string; value?: number; note?: string };
 
@@ -24,6 +25,8 @@ export type AnalyzerContext = {
   books: EntityBooks[];
   // Real logged trips from the Mileage Log app, when synced. Beats estimates.
   mileage?: MileageSummary;
+  // Logged overnight trips from the Travel & Per Diem page.
+  perDiem?: PerDiemSummary;
 };
 
 const r0 = (n: number) => Math.round(n);
@@ -503,6 +506,45 @@ export const EVALUATORS: Record<string, Evaluator> = {
         { label: "First-year timing benefit", value: r0(savings), note: "TIMING benefit vs multi-year depreciation" },
       ],
       cpaChecklist: ["Time purchases to land in the higher-income year.", "Elect §179 on the return; check Utah conformity.", "Keep invoices and in-service dates."],
+    };
+  },
+
+  per_diem_travel(ctx) {
+    const rate = combinedIncomeRate(ctx.intake.owner.fedMarginalRate);
+    const pd = ctx.perDiem;
+    const travelSpend = ctx.books.reduce((s, b) => {
+      return s + Object.entries(b.spendByAccount)
+        .filter(([n]) => /travel|conference/i.test(n))
+        .reduce((x, [, v]) => x + v, 0);
+    }, 0);
+    if (!pd || pd.tripCount === 0) {
+      return {
+        relevant: false, estimatedSavings: 0,
+        summary: travelSpend > 500
+          ? `The books show ${usd0(travelSpend)} of travel/conference spend but no logged overnight trips. Log them on the Travel & Per Diem page — each night away is a documented meals deduction with no receipts needed.`
+          : "No overnight business trips logged. Add them on the Travel & Per Diem page when you travel.",
+        trace: [], cpaChecklist: [],
+      };
+    }
+    const savings = pd.totalDeductible * rate;
+    return {
+      relevant: true, estimatedSavings: r0(savings),
+      summary: `${pd.tripCount} logged overnight trip${pd.tripCount === 1 ? "" : "s"} (${pd.nights} nights) → ${usd0(pd.totalMie)} of M&IE per diem, ${usd0(pd.totalDeductible)} deductible after the 50% meals limit — no meal receipts required.`,
+      trace: [
+        ...rateStep(ctx.intake),
+        { label: `Logged overnight trips (last 12 months)`, value: pd.tripCount },
+        { label: "Nights away", value: pd.nights },
+        { label: "M&IE per diem at dated rates (75% on travel days)", value: r0(pd.totalMie), note: "VERIFY current-year M&IE rates (IRS updates every October)" },
+        { label: "Deductible after the 50% meals limit", value: r0(pd.totalDeductible) },
+        { label: "Estimated annual savings", value: r0(savings) },
+        ...(travelSpend > 0 ? [{ label: "Travel spend already in the books (12 mo)", value: r0(travelSpend), note: "Don't double-count: per diem replaces actual MEAL costs on trip days; flights/hotels stay as actual expenses" }] : []),
+      ],
+      cpaChecklist: [
+        "Confirm the current-year M&IE rates and whether any destination is on the high-cost list.",
+        "Keep trip-purpose documentation (registration, agenda, calendar).",
+        "Meals already expensed in the books for these trip days must be backed out.",
+        "Lodging per diem is NOT allowed for self-employed owners — keep hotel receipts.",
+      ],
     };
   },
 

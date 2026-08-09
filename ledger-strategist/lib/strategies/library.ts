@@ -227,6 +227,21 @@ export const STRATEGY_LIBRARY: StrategySeed[] = [
     verifyNotes: "CPA: confirm eligibility, elect on the return, coordinate with state conformity (Utah) and QBI.",
   },
   {
+    id: "per_diem_travel",
+    name: "Per diem for overnight business travel",
+    description:
+      "For overnight business trips, deduct meals & incidentals at the IRS per-diem rate instead of tracking every meal receipt. Simpler documentation, and often more than actual meal spend. Logged trips on the Travel & Per Diem page feed this automatically.",
+    provision: "IRC §274(d); Rev. Proc. high-low substantiation method (annual IRS notice); 50% meals limit §274(n)",
+    eligibility:
+      "Overnight travel away from your tax home with a business purpose. Self-employed owners: M&IE only (lodging needs actual receipts).",
+    signals: "Travel/conference spend in the books; logged overnight trips.",
+    impactFormula: "Trip days at the dated M&IE rate (75% on first/last day) × 50% meals limit × marginal rate.",
+    effort: 1,
+    complexity: "low",
+    verifyNotes:
+      "CPA must confirm current-year M&IE rates and the high-cost locality list, and that each trip's business purpose is documented. Owners of C-corps/S-corps have different options (employer-paid per diem rules).",
+  },
+  {
     id: "insurance_cashflow",
     name: "Insurance-based cash-flow strategies (advanced)",
     description:

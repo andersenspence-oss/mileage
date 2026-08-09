@@ -24,6 +24,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/flags">Anomaly Flags</Link>
             <Link href="/reports">Reports</Link>
             <Link href="/mileage">Mileage &amp; Vehicles</Link>
+            <Link href="/receipts">Receipts</Link>
+            <Link href="/travel">Travel &amp; Per Diem</Link>
             <div className="navsec">Tax Strategy</div>
             <Link href="/intake">Situation Intake</Link>
             <Link href="/strategies">Strategy Library</Link>

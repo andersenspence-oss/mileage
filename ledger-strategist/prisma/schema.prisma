@@ -169,6 +169,39 @@ model Setting {
   value String
 }
 
+// Receipts: pulled from the Mileage Log app, uploaded photos (Claude reads
+// them), or entered by hand. Matched to book transactions with your approval.
+model Receipt {
+  id                   String   @id @default(cuid())
+  date                 DateTime
+  vendor               String?
+  amount               Float
+  source               String   @default("upload") // mileage_app | upload | manual
+  imageUrl             String? // Drive link (from mileage app)
+  filePath             String? // local file (uploads)
+  note                 String?
+  mileageEntryId       String?  @unique // ties back to the trip it came from
+  matchedTransactionId String?
+  status               String   @default("unmatched") // unmatched | suggested | matched | dismissed
+  createdAt            DateTime @default(now())
+
+  @@index([status])
+  @@index([date])
+}
+
+// Overnight business travel for per-diem (M&IE) deductions.
+model PerDiemTrip {
+  id          String   @id @default(cuid())
+  description String
+  destination String
+  startDate   DateTime
+  endDate     DateTime
+  highCost    Boolean  @default(false)
+  travelers   Int      @default(1)
+  entitySlug  String?
+  createdAt   DateTime @default(now())
+}
+
 // Trips imported from the Mileage Log app (Google Sheet / CSV export).
 // entitySlug is mapped from the trip's Category; null = personal or
 // unassigned business ("Misc. Business").

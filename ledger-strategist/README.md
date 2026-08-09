@@ -118,6 +118,15 @@ never mess up your books.
   strategy engine uses your real logged miles and per-trip IRS rates instead
   of estimates. Trip categories map straight onto your entities, and receipt
   photo links come along for the ride.
+- **Receipts** — every receipt tied to the transaction it proves. Fuel receipts
+  flow in from the mileage app automatically; upload a photo of anything else
+  and the AI reads the vendor, date, and total. One click matches receipts to
+  transactions (you confirm each match), and a coverage score shows which
+  receipt-sensitive expenses (meals, travel, fuel, supplies) still lack
+  documentation.
+- **Travel & Per Diem** — log overnight business trips and the app computes
+  the meals-and-incidentals per-diem deduction (75% travel days and the 50%
+  meals limit applied honestly). Feeds the strategy engine automatically.
 - **Situation Intake** — the one-time questionnaire that powers the strategy
   engine. Update it whenever life changes.
 - **Strategy Library** — the playbook of tax strategies. You can add your own.

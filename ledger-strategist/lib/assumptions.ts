@@ -101,6 +101,22 @@ export const ASSUMPTIONS: Record<string, Assumption> = {
     basis: "2025 figure ($15,000). A child employee can earn up to this federal-income-tax-free.",
     needsVerification: true,
   },
+  perdiem_mie_standard: {
+    key: "perdiem_mie_standard",
+    label: "M&IE per diem — standard rate (high-low method)",
+    value: 68,
+    unit: "usd",
+    basis: "IRS high-low method M&IE rate, ~$68/day (2025 notice). Updated every October.",
+    needsVerification: true,
+  },
+  perdiem_mie_high: {
+    key: "perdiem_mie_high",
+    label: "M&IE per diem — high-cost locality rate",
+    value: 80,
+    unit: "usd",
+    basis: "IRS high-low method high-cost M&IE rate, ~$80/day. Locality list changes annually.",
+    needsVerification: true,
+  },
   qbi_deduction_rate: {
     key: "qbi_deduction_rate",
     label: "Qualified Business Income deduction rate",

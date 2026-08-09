@@ -24,6 +24,22 @@ async function importCsvText(text: string): Promise<{ imported: number; skipped:
         update: data,
         create: { entryId: t.entryId, ...data },
       });
+      // fuel receipts captured on the trip flow into the Receipts module too
+      if (t.fuelTotal && t.fuelTotal > 0) {
+        const receiptData = {
+          date: t.date,
+          vendor: "Fuel",
+          amount: t.fuelTotal,
+          source: "mileage_app",
+          imageUrl: t.receiptPhoto,
+          note: `From mileage log: ${t.category}${t.vehicle ? ` · ${t.vehicle}` : ""}`,
+        };
+        await prisma.receipt.upsert({
+          where: { mileageEntryId: t.entryId },
+          update: { date: receiptData.date, amount: receiptData.amount, imageUrl: receiptData.imageUrl },
+          create: { mileageEntryId: t.entryId, ...receiptData },
+        });
+      }
     } else {
       // no Entry ID (older rows): match on date+miles+category to avoid dupes
       const existing = await prisma.mileageTrip.findFirst({

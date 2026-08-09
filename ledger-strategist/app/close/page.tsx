@@ -120,7 +120,11 @@ export default async function ClosePage({
         <div className="toolbar" style={{ margin: "6px 0" }}>
           <a className="btn small secondary" href="/api/export/flags">Open flags (CSV)</a>
         </div>
-        <h3>5. Tax strategy briefing</h3>
+        <h3>5. Receipt register (documentation)</h3>
+        <div className="toolbar" style={{ margin: "6px 0" }}>
+          <a className="btn small secondary" href="/api/export/receipts">Receipts with match status (CSV)</a>
+        </div>
+        <h3>6. Tax strategy briefing</h3>
         <div className="toolbar" style={{ margin: "6px 0" }}>
           <a className="btn small secondary" href="/plan/briefing">CPA briefing (print to PDF) →</a>
         </div>
