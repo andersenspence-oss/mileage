@@ -114,7 +114,8 @@ export async function claudeSuggest(
         content: `Available account names:\n${accountNames.join(", ")}\n\nTransactions to categorize:\n${lines}`,
       },
     ],
-    output_config: { format: { type: "json_schema", schema } },
+    // SDK typings lag the output_config parameter; the API accepts it.
+    ...({ output_config: { format: { type: "json_schema", schema } } } as object),
   });
 
   const text = response.content.find((b) => b.type === "text");

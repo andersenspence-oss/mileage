@@ -36,7 +36,6 @@ export const DEFAULT_INTAKE: Omit<Intake, "entities"> = {
   retirement: { solo401kActive: false, currentAnnualContribution: 0 },
   health: { hdhpCoverage: true, hsaContribution: 0, annualOutOfPocketMedical: 6000 },
   planning: { plannedEquipmentPurchases: 25000, ownerPaidBusinessCosts: 4800 },
-  entities: undefined as never,
   goals: "",
 };
 
