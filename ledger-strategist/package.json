@@ -1,0 +1,31 @@
+{
+  "name": "ledger-strategist",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ledger + Strategist: multi-entity bookkeeping, reporting, and tax strategy engine",
+  "scripts": {
+    "setup": "npm install && prisma generate && prisma db push && tsx prisma/seed.ts",
+    "start": "next dev -p 4545",
+    "dev": "next dev -p 4545",
+    "build": "next build",
+    "serve": "next start -p 4545",
+    "seed": "tsx prisma/seed.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0",
+    "@prisma/client": "^6.16.0",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "prisma": "^6.16.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
