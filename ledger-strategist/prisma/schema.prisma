@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Entity {
+  id           String          @id @default(cuid())
+  slug         String          @unique
+  name         String
+  kind         String // clinic | media | rental_realestate | holding | operating | other
+  color        String          @default("#14532d")
+  notes        String?
+  sort         Int             @default(0)
+  connection   QboConnection?
+  accounts     Account[]
+  transactions Transaction[]
+}
+
+// QuickBooks Online connection per entity. Tokens are AES-256-GCM encrypted
+// with APP_SECRET before storage — never stored or logged in plaintext.
+model QboConnection {
+  id                    String    @id @default(cuid())
+  entityId              String    @unique
+  entity                Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  realmId               String
+  accessTokenEnc        String
+  refreshTokenEnc       String
+  accessTokenExpiresAt  DateTime
+  refreshTokenExpiresAt DateTime
+  sandbox               Boolean   @default(true)
+  lastSyncedAt          DateTime?
+  companyName           String?
+}
+
+model Account {
+  id             String        @id @default(cuid())
+  entityId       String
+  entity         Entity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  qboId          String?
+  name           String
+  // classification drives report math:
+  // income | expense | cogs | bank | fixed_asset | other_asset
+  // credit_card | liability | equity
+  type           String
+  subtype        String?
+  openingBalance Float         @default(0)
+  transactions   Transaction[]
+
+  @@index([entityId, type])
+}
+
+model Transaction {
+  id             String               @id @default(cuid())
+  entityId       String
+  entity         Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  accountId      String?
+  account        Account?             @relation(fields: [accountId], references: [id])
+  qboId          String?
+  date           DateTime
+  // amount is always positive; flow says which direction money moved
+  amount         Float
+  flow           String // in | out
+  vendor         String?
+  description    String?
+  // categorized | uncategorized | suggested | approved
+  categoryStatus String               @default("categorized")
+  source         String               @default("demo") // demo | qbo
+  suggestions    CategorySuggestion[]
+  flags          AnomalyFlag[]
+
+  @@index([entityId, date])
+  @@index([categoryStatus])
+}
+
+model CategorySuggestion {
+  id                   String      @id @default(cuid())
+  transactionId        String
+  transaction          Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  suggestedAccountName String
+  confidence           Float // 0..1
+  rationale            String
+  source               String      @default("rule") // rule | claude
+  status               String      @default("pending") // pending | approved | edited | rejected
+  createdAt            DateTime    @default(now())
+}
+
+// Learned from your approvals/edits: vendor -> category
+model VendorRule {
+  id            String   @id @default(cuid())
+  vendorPattern String
+  accountName   String
+  entitySlug    String? // null = applies to all entities
+  hits          Int      @default(1)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([vendorPattern, entitySlug])
+}
+
+model AnomalyFlag {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  kind          String // duplicate | unusual_amount | possible_personal | pattern_break
+  detail        String
+  status        String      @default("open") // open | dismissed | resolved
+  createdAt     DateTime    @default(now())
+}
+
+// The one-time situation questionnaire (updatable). Stored as JSON.
+model IntakeProfile {
+  id        String   @id @default("main")
+  dataJson  String
+  updatedAt DateTime @updatedAt
+}
+
+// The strategy library. Seeded with 15 strategies; you can add your own.
+model Strategy {
+  id            String  @id // stable key e.g. "s_corp_election"
+  name          String
+  description   String // plain-language what it is
+  provision     String // tax provision / principle it rests on
+  eligibility   String // conditions that make it relevant
+  signals       String // data signals in the books that suggest it applies
+  impactFormula String // human-readable formula description
+  effort        Int // 1 (easy) .. 5 (heavy)
+  complexity    String // low | medium | high | advanced
+  verifyNotes   String // what needs CPA sign-off
+  paramsJson    String  @default("{}") // year-sensitive numbers + verify flags
+  enabled       Boolean @default(true)
+  custom        Boolean @default(false)
+}
+
+model StrategyResult {
+  id               String   @id @default(cuid())
+  runId            String
+  strategyId       String
+  relevant         Boolean
+  estimatedSavings Float
+  score            Float
+  summary          String
+  mathTraceJson    String // step-by-step math: inputs, rule, assumption
+  cpaChecklistJson String // what to verify with CPA
+  createdAt        DateTime @default(now())
+
+  @@index([runId])
+}
+
+model ScenarioToggle {
+  strategyId String  @id
+  included   Boolean @default(true)
+}
+
+model ChecklistItem {
+  id    String  @id @default(cuid())
+  month String // YYYY-MM
+  label String
+  done  Boolean @default(false)
+  sort  Int     @default(0)
+
+  @@index([month])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
