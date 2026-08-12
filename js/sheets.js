@@ -68,11 +68,13 @@ window.Sheets = (() => {
     return map;
   }
 
+  // The ":append" verb must stay OUTSIDE the URL-encoded range — encoding
+  // the colon makes Google return 404. (Same fix as the Receipt Tracker.)
   async function appendRow(row, title) {
-    await call(valuesURL(quote(title) + "!A1:append", {
-      valueInputOption: "USER_ENTERED",
-      insertDataOption: "INSERT_ROWS",
-    }), { method: "POST", json: { values: [row] } });
+    const p = new URLSearchParams({ valueInputOption: "USER_ENTERED", insertDataOption: "INSERT_ROWS" });
+    await call(base() + "/values/" + encodeURIComponent(quote(title) + "!A1") + ":append?" + p, {
+      method: "POST", json: { values: [row] },
+    });
   }
 
   async function findRow(entryID, map, title) {

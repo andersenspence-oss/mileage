@@ -61,6 +61,12 @@ window.Sync = (() => {
     }
   }
 
+  // Labels each stage so a failure says exactly where it happened.
+  async function step(label, fn) {
+    try { return await fn(); }
+    catch (e) { throw new Error(label + " — " + (e.message || e)); }
+  }
+
   async function syncEntry(entry, title, map) {
     const year = (entry.tripDate || "").slice(0, 4) || String(new Date().getFullYear());
     let folderId = null;
@@ -68,20 +74,20 @@ window.Sync = (() => {
     for (const kind of ["begin", "end", "trip", "receipt"]) {
       const photo = await DB.get("photos", entry.entryID + "_" + kind);
       if (!photo || entry.driveIds[kind]) continue;
-      if (!folderId) folderId = await Sheets.ensureFolder(year);
-      const compressed = await App.compressBlob(photo.blob, 1600, 0.6);
+      if (!folderId) folderId = await step("Drive folder lookup", () => Sheets.ensureFolder(year));
+      const compressed = await step("Photo compression", () => App.compressBlob(photo.blob, 1600, 0.6));
       const label = { begin: "begin-odometer", end: "end-odometer", trip: "tripometer", receipt: "receipt" }[kind];
       const filename = entry.tripDate + "_" + entry.vehicleName.replace(/ /g, "-") + "_" + label + "_" + entry.entryID.slice(0, 8) + ".jpg";
-      entry.driveIds[kind] = await Sheets.uploadPhoto(compressed, filename, folderId);
+      entry.driveIds[kind] = await step("Photo upload (" + label + ")", () => Sheets.uploadPhoto(compressed, filename, folderId));
       await DB.put("entries", entry);
     }
 
     const row = buildRow(entry, map);
-    const existing = await Sheets.findRow(entry.entryID, map, title);
+    const existing = await step("Duplicate check", () => Sheets.findRow(entry.entryID, map, title));
     if (existing) {
-      await Sheets.updateRow(row, existing, title);
+      await step("Sheet row update", () => Sheets.updateRow(row, existing, title));
     } else {
-      await Sheets.appendRow(row, title);
+      await step("Sheet row write", () => Sheets.appendRow(row, title));
     }
     entry.updatedAt = new Date().toISOString();
   }
