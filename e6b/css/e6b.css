@@ -160,6 +160,18 @@ body {
   min-width: 62px; height: var(--tap); background: var(--bg-2); color: var(--accent);
   border: 1px solid var(--line); border-radius: 10px; font-size: 14px; cursor: pointer;
 }
+.fld-sign {
+  min-width: 48px; height: var(--tap); background: var(--bg-2); color: var(--accent);
+  border: 1px solid var(--line); border-radius: 10px; font-size: 20px; cursor: pointer;
+  flex: none;
+}
+.sign-btn {
+  width: 40px; height: 44px; flex: none; background: var(--bg-2); color: var(--accent);
+  border: 1px solid var(--line); border-radius: 10px; font-size: 18px; cursor: pointer;
+}
+.pair.tight { display: flex; gap: 5px; }
+.pair.tight .grid-input { min-width: 0; }
+
 .fld-unit.fixed {
   color: var(--dim); cursor: default; background: none; border-color: transparent;
   min-width: 30px; text-align: left; font-size: 15px;

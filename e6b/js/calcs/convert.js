@@ -83,7 +83,7 @@ export const CONVERT_CALCS = [
     blurb: 'Celsius, Fahrenheit, Kelvin, Rankine.',
     keywords: 'convert temperature celsius fahrenheit kelvin rankine centigrade',
     fields: [
-      { k: 'v', label: 'Value', kind: 'number', def: 15 },
+      { k: 'v', label: 'Value', kind: 'number', def: 15, neg: true },
       { k: 'u', label: 'Units', options: TEMP_UNITS, def: 'C' },
     ],
     compute(v) {

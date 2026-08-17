@@ -47,8 +47,8 @@ export const KINDS = {
   flow: { table: VOLUME, base: 'gal', units: ['gal/hr', 'L/hr'], suffix: '/hr' },
   pressure: { table: PRESSURE, base: 'inHg', units: ['inHg', 'hPa', 'mb'] },
   time: { table: TIME, base: 'min', units: ['min', 'hr', 'sec'] },
-  temp: { temp: true, base: 'C', units: ['C', 'F'] },
-  angle: { fixed: '°' },
+  temp: { temp: true, base: 'C', units: ['C', 'F'], neg: true },
+  angle: { fixed: '°', neg: true },
   bearing: { fixed: '°' },
   pct: { fixed: '%' },
   gradient: { fixed: 'ft/NM' },
@@ -211,6 +211,21 @@ export function renderField(calcId, field, state, onChange) {
   input.addEventListener('focus', () => input.select());
 
   const row = el('span', { class: 'fld-row' }, input);
+
+  // The iOS decimal keypad has no minus key, so any field that can go
+  // negative (temperature, variation, altitude change...) gets a ± button.
+  if (field.neg || kind.neg) {
+    const signBtn = el('button', { class: 'fld-sign', type: 'button', title: 'Flip the sign', 'aria-label': 'Make the value negative or positive' }, '±');
+    signBtn.addEventListener('click', () => {
+      let cur = String(input.value ?? '').trim();
+      // An empty field means the greyed-out default is in effect; flip that.
+      if (cur === '' && field.def != null && field.def !== '') cur = String(field.def);
+      input.value = cur.startsWith('-') ? cur.slice(1) : cur === '' ? '-' : '-' + cur;
+      setState(calcId, field.k, input.value);
+      onChange();
+    });
+    row.append(signBtn);
+  }
 
   if (kind.fixed !== undefined) {
     if (kind.fixed) row.append(el('span', { class: 'fld-unit fixed' }, kind.fixed));

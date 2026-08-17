@@ -146,7 +146,7 @@ export const PLANNING_CALCS = [
     blurb: 'Rate, gradient, distance and time — give it what you know.',
     keywords: 'climb descent rate gradient feet per nautical mile percent angle time distance',
     fields: [
-      { k: 'change', label: 'Altitude to gain (+) or lose (−)', kind: 'altitude', def: 3000 },
+      { k: 'change', label: 'Altitude to gain (+) or lose (−)', kind: 'altitude', def: 3000, neg: true },
       { k: 'gs', label: 'Groundspeed', kind: 'speed', def: 110 },
       { k: 'dist', label: 'Distance available', kind: 'distance', def: 12 },
       { k: 'vs', label: 'Rate (if you know it)', kind: 'vspeed', def: '' },

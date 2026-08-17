@@ -39,13 +39,21 @@ export function renderNavLog() {
     root.replaceWith(next);
   };
 
-  const num = (obj, key, placeholder, cls = '') => {
+  const num = (obj, key, placeholder, cls = '', { neg = false } = {}) => {
     const i = el('input', {
       class: 'grid-input ' + cls, type: 'text', inputmode: 'decimal',
       value: obj[key] ?? '', placeholder, autocomplete: 'off',
     });
     i.addEventListener('input', () => { obj[key] = i.value; save(); update(); });
-    return i;
+    if (!neg) return i;
+    // iOS's decimal keypad has no minus key; give negative-capable fields a ± button.
+    const sign = el('button', { class: 'sign-btn', type: 'button', title: 'Flip the sign' }, '±');
+    sign.addEventListener('click', () => {
+      const cur = String(i.value ?? '').trim();
+      i.value = cur.startsWith('-') ? cur.slice(1) : cur === '' ? '-' : '-' + cur;
+      obj[key] = i.value; save(); update();
+    });
+    return el('span', { class: 'pair tight' }, i, sign);
   };
 
   // ---- Aircraft & wind defaults -------------------------------------------
@@ -53,7 +61,7 @@ export function renderNavLog() {
     field('Cruise TAS', num(s.defaults, 'tas', 'kt')),
     field('Wind from', num(s.defaults, 'wdir', '°')),
     field('Wind speed', num(s.defaults, 'wspd', 'kt')),
-    field('Variation E+/W−', num(s.defaults, 'varn', '°')),
+    field('Variation E+/W−', num(s.defaults, 'varn', '°', '', { neg: true })),
     field('Fuel flow gal/hr', num(s.defaults, 'burn', 'gph')),
     field('Fuel on board', num(s.plan, 'fuel', 'gal')),
     field('Taxi fuel', num(s.plan, 'taxi', 'gal')),
