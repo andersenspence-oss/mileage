@@ -60,3 +60,9 @@ On each iPhone, in **Safari**:
 - **Images don't show in cells** — give Drive a minute to generate thumbnails, then refresh the sheet.
 - **Phone shows an old version** — close the app fully and reopen twice (the first open downloads the update, the second runs it).
 - **iPhone storage warning:** Safari can clear website data if the phone runs critically low on space. Synced entries are safe in the Sheet; keep an eye on the Trips tab so nothing sits unsynced for weeks.
+
+---
+
+## Also in this repo: the E6B flight computer
+
+The `e6b/` folder is a separate, self-contained app — an offline electronic E6B flight computer (true airspeed, density altitude, wind triangle, weight and balance, nav log, holding entries, METAR decoder and study tables). It shares nothing with the mileage tracker except the GitHub Pages hosting, and lives at `https://YOURUSERNAME.github.io/mileage/e6b/`. See [`e6b/README.md`](e6b/README.md).
