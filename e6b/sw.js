@@ -1,7 +1,7 @@
 // sw.js — cache everything on first visit so the app works with no signal.
 // Bump CACHE when any file changes; old caches are deleted on activate.
 
-const CACHE = 'e6b-v4';
+const CACHE = 'e6b-v5';
 
 const ASSETS = [
   './',

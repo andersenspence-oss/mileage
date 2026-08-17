@@ -185,24 +185,36 @@ export const FLIGHT_CALCS = [
     cat: 'Flight',
     name: 'Wind components',
     blurb: 'Headwind and crosswind for a runway or course.',
-    keywords: 'crosswind headwind tailwind component runway limit demonstrated',
+    keywords: 'crosswind headwind tailwind component runway number limit demonstrated find',
     fields: [
-      { k: 'rwy', label: 'Runway / course', kind: 'bearing', def: 210, hint: 'magnetic' },
+      { k: 'rwynum', label: 'Runway number (1–36)', kind: 'number', def: '', placeholder: 'e.g. 36', hint: 'we multiply by 10' },
+      { k: 'rwy', label: '…or full heading / course', kind: 'bearing', def: 210, hint: 'magnetic' },
       { k: 'wdir', label: 'Wind from', kind: 'bearing', def: 250 },
       { k: 'wspd', label: 'Wind speed', kind: 'speed', def: 18 },
       { k: 'gust', label: 'Gusting to (optional)', kind: 'speed', def: '' },
       { k: 'limit', label: 'Demonstrated crosswind', kind: 'speed', def: 15 },
     ],
     compute(v) {
-      const r = W.windComponents({ runwayHeadingDeg: v.rwy, windDirDeg: v.wdir, windSpeedKt: v.wspd });
+      const warn = [];
+      let heading = v.rwy;
+      let headingNote = null;
+      if (Number.isFinite(v.rwynum) && v.rwynum >= 1 && v.rwynum <= 36) {
+        heading = v.rwynum * 10;
+        headingNote = `Runway ${String(Math.round(v.rwynum)).padStart(2, '0')} → heading ${fmtDeg(heading)}°.`;
+      } else if (Number.isFinite(heading) && heading >= 1 && heading <= 36) {
+        // The classic trap: typing the runway number into the heading box.
+        // Runway 36 is 360°, not 036°.
+        warn.push(`Heading taken literally as ${fmtDeg(heading)}°. If you meant Runway ${Math.round(heading)} (heading ${fmtDeg(heading * 10)}°), put ${Math.round(heading)} in the runway-number box instead.`);
+      }
+      if (!Number.isFinite(heading)) return { error: 'Enter a runway number or a heading.' };
+      const r = W.windComponents({ runwayHeadingDeg: heading, windDirDeg: v.wdir, windSpeedKt: v.wspd });
       const sec = [
         { label: 'Angle off the runway', text: `${fmt(r.absAngleDeg, 0)}° from the ${r.angleOffDeg >= 0 ? 'right' : 'left'}` },
         { label: 'Clock-face estimate', value: Math.abs(r.clockRuleCrosswindKt), unit: 'kt', decimals: 1 },
         { label: 'Max wind at this angle for the limit', text: Number.isFinite(v.limit) ? `${fmt(W.maxWindForCrosswind(v.limit, r.absAngleDeg), 1)} kt` : '—' },
       ];
-      const warn = [];
       if (Number.isFinite(v.gust)) {
-        const g = W.windComponents({ runwayHeadingDeg: v.rwy, windDirDeg: v.wdir, windSpeedKt: v.gust });
+        const g = W.windComponents({ runwayHeadingDeg: heading, windDirDeg: v.wdir, windSpeedKt: v.gust });
         sec.unshift({ label: 'Crosswind in the gusts', value: Math.abs(g.crosswindKt), unit: 'kt', decimals: 1, emph: true });
         sec.unshift({ label: 'Headwind in the gusts', value: g.headwindKt, unit: 'kt', decimals: 1 });
         if (Number.isFinite(v.limit) && Math.abs(g.crosswindKt) > v.limit) {
@@ -221,10 +233,11 @@ export const FLIGHT_CALCS = [
         secondary: sec,
         warn,
         work: [
+          headingNote,
           `Angle between the wind and the runway = ${fmt(r.absAngleDeg, 0)}°`,
           `Headwind = ${fmt(v.wspd, 0)} × cos ${fmt(r.absAngleDeg, 0)}° = ${fmt(r.headwindKt, 1)} kt`,
           `Crosswind = ${fmt(v.wspd, 0)} × sin ${fmt(r.absAngleDeg, 0)}° = ${fmt(Math.abs(r.crosswindKt), 1)} kt`,
-        ],
+        ].filter(Boolean),
         notes: ['Runway numbers and tower-reported winds are magnetic; a METAR wind is true. Use the runway analysis page if you need to mix the two.'],
       };
     },
