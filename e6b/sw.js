@@ -47,7 +47,9 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      // Cache storage is shared across the whole github.io origin, so only
+      // ever touch our own caches — the mileage app lives here too.
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('e6b-') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
