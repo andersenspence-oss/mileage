@@ -3,7 +3,7 @@
 import { decodeMetar, decodeRemarks, ceilingFt } from '../core/metar.js';
 import * as ATM from '../core/atmosphere.js';
 import * as W from '../core/wind.js';
-import { el, fmt, fmtDeg, getState, setState, parseNumber, renderTable } from '../ui.js';
+import { el, esc, fmt, fmtDeg, getState, setState, parseNumber, renderTable } from '../ui.js';
 
 const ID = 'wx';
 
@@ -133,7 +133,7 @@ function decodeCard(d, s) {
     const decoded = decodeRemarks(d.remarks).filter((x) => x.text);
     if (decoded.length) {
       card.append(el('h4', { class: 'sub-title' }, 'Remarks'));
-      card.append(renderTable({ head: null, rows: decoded.map((x) => [`<b>${x.code}</b>`, x.text]), className: 'kv' }));
+      card.append(renderTable({ head: null, rows: decoded.map((x) => [`<b>${esc(x.code)}</b>`, esc(x.text)]), className: 'kv' }));
     }
   }
 

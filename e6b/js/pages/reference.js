@@ -35,7 +35,7 @@ export function renderReference() {
         ['Class G — above 1 200 AGL and at/above 10 000 MSL', '5 SM', '1 000 below · 1 000 above · 1 SM horizontal'],
       ],
     }),
-    note('Night exception, 91.155(b): in Class G at or below 1 200 ft AGL, an aeroplane in the traffic pattern within ½ mile of the runway may use 1 SM and clear of clouds. 91.155(c): you may not operate beneath the ceiling of a Class B, C, D or E surface area when the reported visibility is less than 3 SM. 91.155(d): special VFR needs 1 SM and clear of clouds, and at night both an instrument rating and an instrument-capable aeroplane.'));
+    note('Night exception, 91.155(b): in Class G at or below 1 200 ft AGL, an aeroplane in the traffic pattern within ½ mile of the runway may use 1 SM and clear of clouds. 91.155(c): you may not fly VFR beneath the ceiling within the lateral boundaries of a surface area designated for an airport (Class B, C, D or E to the surface) when the ceiling is less than 1 000 ft. 91.155(d): you may not take off, land, or enter the traffic pattern of an airport in such a surface area unless ground visibility (or flight visibility, if ground is not reported) is at least 3 SM. Special VFR is 91.157: 1 SM and clear of clouds, and at night both an instrument rating and an instrument-equipped aeroplane.'));
 
   // ------------------------------------------------------------------- fuel
   add('fuel', 'Fuel, oxygen and lights',
@@ -161,7 +161,7 @@ export function renderReference() {
         ['V<sub>FE</sub>', 'Maximum flap extended — the top of the white arc'],
         ['V<sub>NO</sub>', 'Maximum structural cruising — the top of the green arc; stay below it in rough air'],
         ['V<sub>NE</sub>', 'Never exceed — the red line'],
-        ['V<sub>A</sub>', 'Maneuvering speed. Not marked on the ASI, and it <b>decreases</b> with weight (× √weight ratio)'],
+        ['V<sub>A</sub>', 'Maneuvering speed. Not marked on the ASI, and it is <b>lower at lighter weights</b> (× √weight ratio)'],
         ['V<sub>X</sub>', 'Best angle of climb — most altitude per unit of <i>distance</i>, for clearing obstacles'],
         ['V<sub>Y</sub>', 'Best rate of climb — most altitude per unit of <i>time</i>'],
         ['V<sub>G</sub>', 'Best glide — the greatest distance per foot of altitude lost'],

@@ -27,6 +27,12 @@ export function el(tag, attrs = {}, ...children) {
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 
+/** Escape user-supplied text before it is placed in an html: cell. */
+export function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // ---------------------------------------------------------------------------
 // Field kinds: which unit family a field belongs to, and what it converts to.
 
@@ -127,9 +133,12 @@ try { store = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch { sto
 let saveTimer = null;
 export function saveStore() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch { /* private mode */ }
-  }, 150);
+  saveTimer = setTimeout(flushStore, 150);
+}
+/** Write the store synchronously — needed before location.reload(). */
+export function flushStore() {
+  clearTimeout(saveTimer);
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch { /* private mode */ }
 }
 export function getState(id) {
   return (store[id] ||= {});
@@ -157,7 +166,7 @@ export function setSetting(key, value) {
 export function renderField(calcId, field, state, onChange) {
   const unitKey = `${field.k}__unit`;
   const kind = KINDS[field.kind] || KINDS.number;
-  const unit = state[unitKey] || field.unit || defaultUnit(field.kind);
+  let unit = state[unitKey] || field.unit || defaultUnit(field.kind);
 
   if (field.options) {
     const sel = el('select', { class: 'fld-select', id: `f-${calcId}-${field.k}` },
@@ -218,6 +227,7 @@ export function renderField(calcId, field, state, onChange) {
         setState(calcId, field.k, input.value);
       }
       setState(calcId, unitKey, next);
+      unit = next;
       btn.textContent = next;
       onChange();
     });

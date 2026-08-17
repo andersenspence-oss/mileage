@@ -2,7 +2,7 @@
 
 import * as WB from '../core/wb.js';
 import { FUEL_LB_PER_GAL } from '../core/units.js';
-import { el, fmt, getState, setState, parseNumber, renderTable } from '../ui.js';
+import { el, esc, fmt, getState, setState, parseNumber, renderTable } from '../ui.js';
 
 const ID = 'wb';
 
@@ -114,7 +114,7 @@ export function renderWB() {
       head: ['Station', 'Weight', 'Arm', 'Moment'],
       rows: [
         ...sheet.rows.map((r) => [
-          r.name + (r.fuel && Number.isFinite(r.gallons) ? ` (${fmt(r.gallons, 1)} gal)` : ''),
+          esc(r.name) + (r.fuel && Number.isFinite(r.gallons) ? ` (${fmt(r.gallons, 1)} gal)` : ''),
           fmt(r.weight, 1),
           Number.isFinite(r.arm) ? fmt(r.arm, 2) : '—',
           fmt(r.moment, 0),

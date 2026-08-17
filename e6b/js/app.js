@@ -12,7 +12,7 @@ import { renderTimer } from './pages/timer.js';
 import { renderReference } from './pages/reference.js';
 import {
   el, $, renderField, renderResults, readValues,
-  getState, setState, getSetting, setSetting,
+  getState, setState, getSetting, setSetting, flushStore,
 } from './ui.js';
 
 export const CALCS = [...FLIGHT_CALCS, ...PLANNING_CALCS, ...ATMOS_CALCS, ...CONVERT_CALCS];
@@ -157,6 +157,7 @@ function renderCalc(id) {
   reset.addEventListener('click', () => {
     for (const f of calc.fields) delete state[f.k];
     setState(calc.id, '__cleared', Date.now());
+    flushStore();
     location.reload();
   });
 

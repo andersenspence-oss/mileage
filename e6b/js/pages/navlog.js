@@ -1,7 +1,7 @@
 // pages/navlog.js — a full VFR/IFR nav log: legs in, headings, times and fuel out.
 
 import { computeNavLog } from '../core/flightplan.js';
-import { el, fmt, fmtDeg, getState, setState, parseNumber, renderTable } from '../ui.js';
+import { el, esc, fmt, fmtDeg, getState, setState, parseNumber, renderTable } from '../ui.js';
 import { hhmm } from '../core/units.js';
 
 const ID = 'navlog';
@@ -123,7 +123,7 @@ export function renderNavLog() {
     const rows = log.rows.map((r) => ({
       className: r.unflyable ? 'bad' : '',
       cells: [
-        r.name,
+        esc(r.name),
         `${fmtDeg(r.trueCourseDeg)}°`,
         `${fmtDeg(r.magneticHeadingDeg)}°`,
         fmt(r.distanceNm, 0),
