@@ -9,7 +9,7 @@ export const ATMOS_CALCS = [
     cat: 'Atmosphere',
     name: 'Pressure & density altitude',
     blurb: 'The two altitudes performance actually depends on.',
-    keywords: 'pressure altitude density altitude field elevation altimeter setting performance takeoff',
+    keywords: 'find pressure altitude density altitude airport field elevation altimeter setting barometric performance takeoff',
     fields: [
       { k: 'elev', label: 'Field elevation / altitude', kind: 'altitude', def: 2941 },
       { k: 'baro', label: 'Altimeter setting', kind: 'pressure', def: 30.05 },
@@ -53,6 +53,7 @@ export const ATMOS_CALCS = [
         ],
         notes: [
           'Pressure altitude uses the FAA rule (1 000 ft per inch of mercury) because that is what the knowledge-test answer keys use. Density altitude is computed exactly, matching the FAA density-altitude chart rather than the 118.8 ft/°C shortcut.',
+          'On a multiple-choice question, pick the answer <b>closest</b> to this result. Different E6B devices round the intermediate steps differently, so keyed answers can sit 20–40 ft away from the exact figure — the choices are always spaced far enough apart that the closest one is the keyed one.',
         ],
       };
     },

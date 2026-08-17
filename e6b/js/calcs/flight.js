@@ -146,13 +146,13 @@ export const FLIGHT_CALCS = [
   {
     id: 'wind-determine',
     cat: 'Flight',
-    name: 'Determine the wind aloft',
-    blurb: 'Heading, TAS, track and groundspeed → the wind you are actually in.',
-    keywords: 'determine wind aloft actual heading track groundspeed reverse',
+    name: 'Actual wind (from heading & track)',
+    blurb: 'Heading, TAS, course made good and groundspeed → the actual wind speed and direction.',
+    keywords: 'determine actual wind speed direction aloft calculate heading track course groundspeed reverse unknown',
     fields: [
       { k: 'hdg', label: 'True heading flown', kind: 'bearing', def: 90 },
       { k: 'tas', label: 'True airspeed', kind: 'speed', def: 120 },
-      { k: 'track', label: 'Track made good', kind: 'bearing', def: 100 },
+      { k: 'track', label: 'Course / track made good', kind: 'bearing', def: 100, hint: 'the "course" in a test question' },
       { k: 'gs', label: 'Groundspeed', kind: 'speed', def: 105 },
     ],
     compute(v) {
@@ -172,7 +172,10 @@ export const FLIGHT_CALCS = [
           `Air: ${fmt(v.tas, 0)} kt on ${deg(v.hdg)} · Ground: ${fmt(v.gs, 0)} kt on ${deg(v.track)}`,
           `Difference = ${fmt(r.windSpeedKt, 1)} kt blowing toward ${deg(norm360(r.windDirDeg + 180))}, i.e. <b>from ${deg(r.windDirDeg)}</b>`,
         ],
-        notes: ['Enter headings and tracks in the same reference. If you read the track off a GPS it is normally true; a heading indicator is magnetic.'],
+        notes: [
+          'When a test question gives a course AND a separate heading, the course is the track made good — enter it here with the heading, TAS and groundspeed, and the wind falls out.',
+          'Enter headings and tracks in the same reference. A GPS track is normally true; a heading indicator is magnetic.',
+        ],
       };
     },
   },

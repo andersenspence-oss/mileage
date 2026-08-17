@@ -67,10 +67,14 @@ function renderList() {
     });
     results.replaceChildren();
 
+    const words = q.split(/\s+/).filter(Boolean);
     const match = (c) => {
       if (state.cat && c.cat !== state.cat) return false;
-      if (!q) return true;
-      return (`${c.name} ${c.blurb} ${c.keywords} ${c.cat}`).toLowerCase().includes(q);
+      if (!words.length) return true;
+      const hay = (`${c.name} ${c.blurb} ${c.keywords} ${c.cat}`).toLowerCase();
+      // Every word must appear somewhere, so "actual wind speed" finds the
+      // wind calculator even though those words are not adjacent anywhere.
+      return words.every((w) => hay.includes(w));
     };
     const list = CALCS.filter(match);
 
