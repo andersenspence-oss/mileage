@@ -1,0 +1,10 @@
+{
+  "name": "e6b-flight-computer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline electronic E6B flight computer (PWA)",
+  "scripts": {
+    "test": "node --test test/"
+  }
+}
