@@ -1,0 +1,23 @@
+{
+  "name": "E6B Flight Computer",
+  "short_name": "E6B",
+  "description": "Offline electronic flight computer: true airspeed, density altitude, wind triangle, weight and balance, nav log, holding entries, METAR decoder and study tables.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1d33",
+  "categories": ["utilities", "education", "travel"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "True airspeed", "url": "./#calc/tas" },
+    { "name": "Wind triangle", "url": "./#calc/wind-triangle" },
+    { "name": "Nav log", "url": "./#plan/navlog" },
+    { "name": "Timer", "url": "./#timer" }
+  ]
+}
