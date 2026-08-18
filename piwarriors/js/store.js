@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
   xPremium: false,
   facebookLongForm: false,
   igHashtagsInComment: false,
+  // Selling posts per platform per seven days. The posts are conversation
+  // starters first; this is the occasional dusting on top.
+  offersPerWeek: 1,
   tagSeparator: ", ",
   notes: "",
 };

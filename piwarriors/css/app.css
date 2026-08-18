@@ -204,3 +204,6 @@ details .body { margin-top: 10px; white-space: pre-wrap; font-size: 13px; line-h
 
 .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
 .empty .big { font-size: 34px; margin-bottom: 10px; }
+
+/* The rationed selling post is marked so it is obvious at a glance. */
+.pill.offer { background: var(--warn); color: #fff; }

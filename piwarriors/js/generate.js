@@ -13,7 +13,7 @@ import {
   postsPerDay,
   bodyBudget,
 } from "./limits.js";
-import { scanPost, blockers, normalizePunctuation } from "./voice.js";
+import { scanPost, blockers, normalizePunctuation, sellingFindings, INTENTS } from "./voice.js";
 
 const MAX_REPAIR_ROUNDS = 3;
 const CONCURRENCY = 3;
@@ -169,6 +169,7 @@ function postsSchema() {
             hashtags: { type: "array", items: { type: "string" } },
             tags: { type: "array", items: { type: "string" } },
             pillar: { type: "string", enum: PILLARS.map((p) => p.id) },
+            intent: { type: "string", enum: INTENTS },
             slot: { type: "string" },
             media: {
               type: "object",
@@ -213,6 +214,15 @@ function budgetBrief(platformId, settings) {
   return `HARD LIMIT: at most ${limit} characters including hashtags. Aim for 1200 to 2200. The first ${p.fold} characters show before "see more", so the opening has to carry the claim.`;
 }
 
+// Selling is rationed per batch. Spelling out the exact number, including zero,
+// is what keeps a week of conversation from drifting into a week of pitching.
+function sellingBrief(count, total) {
+  if (!count) {
+    return `SELLING: none. Not one of these ${total} post${total === 1 ? "" : "s"} sells anything. No link, no product pitch, no invitation to sign up, book, subscribe or download, no pointing at the bio, and nothing softened onto the end. Each post ends on its idea or on a real question. Mark every one of them as conversation, insight or story.`;
+  }
+  return `SELLING: exactly ${count} of these ${total} posts may carry a call to action, and it belongs to whichever post has earned it. Mark that post as intent "offer". Its ask is one quiet line at the very end, after a post that stands up on its own. No urgency, no scarcity, no discount, and only one ask. Every other post in this batch sells nothing at all and is marked conversation, insight or story.`;
+}
+
 function historyBrief(history) {
   if (!history || !history.length) return "";
   return `\nHooks already used in recent weeks. Do not reuse or lightly reword any of these:\n${history
@@ -229,6 +239,7 @@ export async function generateChunk({
   weekTheme,
   angle,
   count,
+  offersAllowed = 0,
   signals,
   history,
   settings,
@@ -246,6 +257,8 @@ This platform's angle: ${angle}
 ${PLATFORM_BRIEFS[platform]}
 
 ${budgetBrief(platform, settings)}
+
+${sellingBrief(offersAllowed, count)}
 ${historyBrief(history)}
 Research briefing behind this week:
 ---
@@ -258,6 +271,7 @@ For each post:
 - "hashtags" are without the # symbol, one tag per array entry, letters and numbers only. ${p.minHashtags ? `Between ${p.minHashtags} and ${p.maxHashtags}.` : `At most ${p.maxHashtags}, and zero is a valid answer.`} Lead with the most specific and finish with the broader reach tags. Do not put hashtags inside the body; they belong only in this field.
 - "tags" are accounts worth @-mentioning, without the @ symbol. Only include an account when mentioning it genuinely makes sense and the account plausibly exists in this space. An empty list is the right answer most of the time. Never invent a specific person's handle.
 - "pillar" is the Five Pillars id this post actually serves.
+- "intent" is what the post is for. "conversation" asks something real and leaves room for an answer. "insight" reframes or teaches. "story" is a specific thing that happened. "offer" is the rationed selling post, and only when this batch was allowed one.
 - "slot" is a suggested posting time for this platform on this day, like "7:15am" or "12:30pm".
 - "media" describes what should run with the post:
   - "kind" is the format. ${p.name} takes: ${p.mediaKinds.join(", ")}.
@@ -302,10 +316,28 @@ function cleanPost(post) {
 // --------------------------------------------------------------- repair
 
 // Everything the post got wrong, in the plainest terms the model can act on.
-function problemReport(platform, post, settings) {
+function problemReport(platform, post, settings, offerAllowed = false) {
   const check = validatePost(platform, post, settings);
   const tells = blockers(scanPost(post));
   const lines = [];
+
+  // A post that sells when the batch had no sell to give is a rewrite, not a
+  // warning: the whole point of the cadence is that most posts never pitch.
+  const selling = sellingFindings(offerAllowed ? { ...post, intent: "offer" } : { ...post, intent: "conversation" });
+  if (selling.length) {
+    lines.push(
+      offerAllowed
+        ? `Remove the manufactured urgency: ${selling.map((f) => f.label).join("; ")}. The ask stays quiet and earns its place.`
+        : `This post is not one of the ones allowed to sell, but it does: ${selling
+            .map((f) => f.label)
+            .join("; ")}. Cut the ask entirely and end the post on its idea or on a real question. Do not soften it, remove it.`
+    );
+  }
+  if (post.intent === "offer" && !offerAllowed) {
+    lines.push(
+      "This batch was not allowed a selling post. Rewrite this one as a conversation, insight or story piece with no call to action, and set intent accordingly."
+    );
+  }
 
   for (const e of check.errors) {
     if (e.code === "too_long") {
@@ -331,7 +363,7 @@ function problemReport(platform, post, settings) {
   return lines;
 }
 
-async function repairPosts({ apiKey, model, platform, broken, settings, signal }) {
+async function repairPosts({ apiKey, model, platform, broken, settings, offersAllowed = 0, signal }) {
   const p = PLATFORMS[platform];
   const listing = broken
     .map((item, i) => {
@@ -350,6 +382,8 @@ Current hashtags: ${item.post.hashtags.join(", ") || "(none)"}`;
   const prompt = `These ${p.name} posts did not pass the checks. Rewrite each one so it passes, and return them in the same order.
 
 ${budgetBrief(platform, settings)}
+
+${sellingBrief(offersAllowed, broken.length)}
 
 ${listing}
 
@@ -371,14 +405,30 @@ Keep each post's argument, its specifics and its voice. Fix only what is listed.
 
 // Generate, then check and rewrite until clean or out of rounds, then force the
 // hard limits so nothing is ever handed over above its ceiling.
+// Which posts in this batch are permitted to sell: the first ones the model
+// marked as an offer, up to the batch's allowance. Everything after that is
+// over budget and gets rewritten.
+function offerAllowance(posts, allowed) {
+  const permitted = new Set();
+  let used = 0;
+  posts.forEach((post, i) => {
+    if (post.intent === "offer" && used < allowed) {
+      permitted.add(i);
+      used += 1;
+    }
+  });
+  return permitted;
+}
+
 async function finishChunk(ctx, posts) {
-  const { apiKey, model, platform, settings, signal, onNote } = ctx;
+  const { apiKey, model, platform, settings, signal, onNote, offersAllowed = 0 } = ctx;
   let current = posts;
 
   for (let round = 0; round < MAX_REPAIR_ROUNDS; round += 1) {
+    const permitted = offerAllowance(current, offersAllowed);
     const broken = [];
     current.forEach((post, index) => {
-      const problems = problemReport(platform, post, settings);
+      const problems = problemReport(platform, post, settings, permitted.has(index));
       if (problems.length) broken.push({ index, post, problems });
     });
     if (!broken.length) break;
@@ -389,7 +439,7 @@ async function finishChunk(ctx, posts) {
 
     let fixed;
     try {
-      fixed = await repairPosts({ apiKey, model, platform, broken, settings, signal });
+      fixed = await repairPosts({ apiKey, model, platform, broken, settings, offersAllowed, signal });
     } catch (err) {
       if (err && err.name === "AbortError") throw err;
       break; // Fall through to the deterministic trim below.
@@ -407,18 +457,30 @@ async function finishChunk(ctx, posts) {
 
   // Deterministic backstop. After this, a post is inside its limits regardless
   // of what the model did.
-  return current.map((post) => {
+  const finalPermitted = offerAllowance(current, offersAllowed);
+
+  return current.map((post, index) => {
     const { post: safe, notes } = enforce(platform, post, settings);
     const check = validatePost(platform, safe, settings);
     const tells = scanPost(safe);
+    const offerAllowed = finalPermitted.has(index);
 
     const warnings = tells.map((t) => t.label);
+
+    // Prose cannot be de-sold deterministically, so anything still selling is
+    // named on the card rather than shipped quietly.
+    const stillSelling = sellingFindings(
+      offerAllowed ? { ...safe, intent: "offer" } : { ...safe, intent: "conversation" }
+    );
 
     // Anything the rewrites never resolved is reported rather than buried,
     // because enforce() can cut but it cannot invent a missing hashtag.
     const residual = check.errors
       .filter((e) => e.code !== "too_long")
       .map((e) => e.message);
+    for (const f of stillSelling) {
+      residual.push(offerAllowed ? `Hype to cut: ${f.label}.` : `This one sells, and it was not meant to: ${f.label}.`);
+    }
 
     // The opening has to survive the fold or the hook is never read.
     const firstLine = (safe.body || "").split("\n")[0];
@@ -430,7 +492,9 @@ async function finishChunk(ctx, posts) {
     return {
       ...safe,
       platform,
+      intent: offerAllowed ? "offer" : safe.intent === "offer" ? "insight" : safe.intent || "insight",
       _check: {
+        offer: offerAllowed,
         used: check.used,
         limit: check.limit,
         remaining: check.remaining,
@@ -474,6 +538,35 @@ export function buildDays(startDate, count) {
     });
   }
   return out;
+}
+
+/**
+ * Decides which platform-days get the week's rare selling post.
+ *
+ * The setting is per platform per seven days, so a shorter run gets
+ * proportionally fewer, and a one-day run normally gets none. Picks are spread
+ * across the run rather than clustered, so the sell never lands twice in a row.
+ */
+export function allocateOffers(platforms, days, perWeek) {
+  const map = {};
+  const total = days.length;
+  if (!total || !perWeek) return map;
+
+  for (const platform of platforms) {
+    const count = Math.min(total, Math.round((perWeek * total) / 7));
+    if (!count) continue;
+    const picks = new Set();
+    for (let i = 0; i < count; i += 1) {
+      // Evenly spaced positions, e.g. one offer lands mid-run rather than day one.
+      let idx = Math.floor(((i + 0.5) * total) / count);
+      idx = Math.min(total - 1, Math.max(0, idx));
+      while (picks.has(idx) && idx < total - 1) idx += 1;
+      while (picks.has(idx) && idx > 0) idx -= 1;
+      picks.add(idx);
+    }
+    for (const i of picks) map[`${platform}|${days[i].date}`] = 1;
+  }
+  return map;
 }
 
 /**
@@ -532,6 +625,8 @@ export async function runWeek({
     };
   });
 
+  const offers = allocateOffers(platforms, planDays, settings.offersPerWeek ?? 1);
+
   const chunks = [];
   for (const day of planDays) {
     for (const platform of platforms) {
@@ -541,6 +636,7 @@ export async function runWeek({
         day,
         angle: (angleEntry && angleEntry.angle) || day.theme,
         count: postsPerDay(platform, settings),
+        offersAllowed: offers[`${platform}|${day.date}`] || 0,
       });
     }
   }
@@ -549,7 +645,7 @@ export async function runWeek({
 
   let done = 0;
   const results = await pooled(chunks, CONCURRENCY, async (chunk) => {
-    const ctx = { apiKey, model, platform: chunk.platform, settings, signal, onNote };
+    const ctx = { apiKey, model, platform: chunk.platform, settings, signal, onNote, offersAllowed: chunk.offersAllowed };
     let posts = [];
     try {
       posts = await generateChunk({
@@ -560,6 +656,7 @@ export async function runWeek({
         weekTheme: plan.weekTheme,
         angle: chunk.angle,
         count: chunk.count,
+        offersAllowed: chunk.offersAllowed,
         signals,
         history: history && history.hooks,
         settings,
@@ -587,6 +684,7 @@ export async function runWeek({
     model,
     weekTheme: plan.weekTheme,
     rationale: plan.rationale,
+    offersPerWeek: settings.offersPerWeek ?? 1,
     signals,
     days: planDays,
     chunks: results,

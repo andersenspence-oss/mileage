@@ -3,7 +3,7 @@
 import { PLATFORMS, PLATFORM_ORDER, postsPerDay } from "./limits.js";
 import { PILLARS } from "./brand.js";
 import { MODELS, testConnection, estimateRun } from "./api.js";
-import { runWeek, buildDays } from "./generate.js";
+import { runWeek, buildDays, allocateOffers } from "./generate.js";
 import { loadSettings, saveSettings, loadRuns, saveRun, deleteRun, getRun, historyFor, storageUsage } from "./store.js";
 import { el, clear, copyButton, toast, download, formatDate } from "./ui.js";
 import {
@@ -173,9 +173,15 @@ function renderWrite() {
       model: state.settings.model,
       batches: state.settings.platforms.length * state.settings.dayCount,
     });
+    const selling = Object.keys(
+      allocateOffers(state.settings.platforms, days, state.settings.offersPerWeek ?? 1)
+    ).length;
+    const sellingLine = selling
+      ? `${selling} of them carr${selling === 1 ? "ies" : "y"} a soft call to action. The rest sell nothing.`
+      : `None of them sell anything.`;
     totalLine.textContent =
       `${total} posts — ${perDayTotal} a day across ${state.settings.dayCount} day${state.settings.dayCount === 1 ? "" : "s"}, ` +
-      `${formatDate(days[0].date)} through ${formatDate(last.date)}. ` +
+      `${formatDate(days[0].date)} through ${formatDate(last.date)}. ${sellingLine} ` +
       `Roughly ${est.minutes} minute${est.minutes === 1 ? "" : "s"} and $${est.low.toFixed(2)} to $${est.high.toFixed(2)} of API usage.`;
   }
   renderTotal();
@@ -411,6 +417,8 @@ function renderPost(post, platformId, index, day) {
     check.remaining < 0 ? "counter over" : check.remaining < check.limit * 0.08 ? "counter tight" : "counter";
 
   const pillar = PILLARS.find((x) => x.id === post.pillar);
+  const INTENT_LABEL = { conversation: "Conversation", insight: "Insight", story: "Story", offer: "Soft CTA" };
+  const intentLabel = INTENT_LABEL[post.intent] || null;
 
   card.appendChild(
     el("div", { class: "post-head" }, [
@@ -418,6 +426,7 @@ function renderPost(post, platformId, index, day) {
       el("span", { class: "pill", text: `#${index}` }),
       post.slot ? el("span", { class: "pill pillar", text: post.slot }) : null,
       pillar ? el("span", { class: "pill pillar", text: pillar.name }) : null,
+      intentLabel ? el("span", { class: check.offer ? "pill offer" : "pill pillar", text: intentLabel }) : null,
       el("span", { class: "spacer" }),
       el("span", { class: counterClass, text: `${check.used}/${check.limit}` }),
     ])
@@ -594,6 +603,19 @@ function renderSettings() {
       persist();
     })
   );
+  const offerField = el("div", { class: "field" }, [el("span", { text: "Selling posts per platform, per week" })]);
+  offerField.appendChild(
+    stepper(s.offersPerWeek ?? 1, 0, 3, (n) => {
+      state.settings.offersPerWeek = n;
+      persist();
+      render();
+    })
+  );
+  rules.appendChild(offerField);
+  rules.appendChild(
+    el("p", { class: "small muted", style: "margin-top:-2px; margin-bottom:6px", text: "Everything else is written to start a conversation, not to sell. At one a week across four platforms that is four selling posts in about ninety, spread so the ask never lands twice in a row. Set it to zero for a week that sells nothing at all." })
+  );
+
   const sepField = el("div", { class: "field" }, [el("span", { text: "Tag separator" })]);
   const sepSelect = el("select", {
     onchange: (e) => {

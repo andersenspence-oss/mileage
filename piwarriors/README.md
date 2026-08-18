@@ -21,6 +21,11 @@ default week is:
 | Facebook | 3 | 21 |
 | X | 6 (adjustable 5 to 7) | 42 |
 
+These posts are conversation starters, not advertising. Almost none of them
+sell anything: they teach, reframe, admit something, or ask a question a
+provider can actually answer. Selling is rationed on purpose, and the app
+enforces the ration rather than trusting the model to remember it.
+
 Every post arrives with three things you can copy on their own with one tap:
 
 1. **The post**, ready to paste, already inside the platform's character limit.
@@ -116,6 +121,32 @@ own vocabulary and book quotes, so real PI Warriors language passes untouched.
 every new run is given the previous themes and opening lines with instructions
 not to reuse them.
 
+**Selling stays rare.** Before a run starts, the app decides which specific
+platform-days are allowed a call to action, spreads them so the ask never lands
+twice in a row, and tells every other batch in plain terms that it may not sell
+at all. At the default of one per platform per week that is four selling posts
+in about ninety.
+
+A post outside that budget is not allowed to slip an ask in at the end. Links,
+sign-up lines, "book a call", "link in bio" and crash101.com URLs are all
+treated as faults in a post that was not allocated a sell, and it is sent back
+to be rewritten with the ask removed rather than softened. Manufactured urgency
+is banned everywhere, including in the selling posts: no countdowns, no
+scarcity, no discounts. Urgency is earned.
+
+Every card is badged with what the post is for, so a week is readable at a
+glance:
+
+| Badge | What it is |
+|---|---|
+| Conversation | Asks something real and leaves room for the answer |
+| Insight | Reframes or teaches something |
+| Story | A specific thing that happened |
+| Soft CTA | The rationed selling post, one quiet line at the end |
+
+Change the cadence in **Settings → Selling posts per platform, per week**.
+Zero produces a week that sells nothing at all.
+
 ---
 
 ## Settings worth knowing
@@ -125,6 +156,8 @@ not to reuse them.
   caption's character budget.
 - **Long Facebook posts** lifts the 1,500 character target to Facebook's real
   ceiling. The default target exists because reach falls off well before that.
+- **Selling posts per platform, per week** sets how often a call to action is
+  allowed. One is the default. Zero sells nothing.
 - **Tag separator** controls how the tag line is displayed and copied. The
   *Post + tags* button always uses spaces, because that is what the composers
   parse.
@@ -154,10 +187,10 @@ is well under a dollar.
 ## Development
 
 ```
-npm test        # 36 tests over the counting, limits, voice and export logic
+npm test        # 47 tests over the counting, limits, voice, selling cadence and export logic
 ```
 
 The app is plain ES modules with no build step and no dependencies, matching the
 other apps in this repository. `js/limits.js` holds the platform rules and the
-character maths, `js/voice.js` the machine-writing scanner, `js/brand.js` the
+character maths, `js/voice.js` the machine-writing and selling scanners, `js/brand.js` the
 brand system prompt, and `js/generate.js` the run pipeline.

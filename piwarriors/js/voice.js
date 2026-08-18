@@ -126,3 +126,74 @@ export function normalizePunctuation(text) {
     .replace(/…/g, "...")
     .replace(/ /g, " ");
 }
+
+// ---------------------------------------------------------------- selling
+
+// The brand sells sporadically and softly. Most posts are conversation
+// starters, so the sell is treated as a budgeted event: a handful of posts a
+// week are allowed to carry a call to action, and the rest must not.
+
+// Manufactured urgency and hype are banned in every post, offer or not. The
+// voice rule is that urgency is earned, never manufactured.
+const HARD_SELL = [
+  { re: /\blimited[-\s]time\b/i, label: "limited time" },
+  { re: /\bact (now|fast|today)\b/i, label: "act now" },
+  { re: /\bdon'?t miss (out|this)\b/i, label: "don't miss out" },
+  { re: /\b(spots?|seats?) (are )?(left|remaining|filling)\b/i, label: "spots left" },
+  { re: /\bspecial offer\b/i, label: "special offer" },
+  { re: /\b\d+% off\b/i, label: "percentage off" },
+  { re: /\b(discount|coupon|promo code)\b/i, label: "discount" },
+  { re: /\bwhile supplies last\b/i, label: "while supplies last" },
+  { re: /\bonly \d+ (left|spots?|days?)\b/i, label: "only N left" },
+  { re: /\bhurry\b/i, label: "hurry" },
+];
+
+// These are the actual asks. Fine in a post that is meant to sell, wrong in a
+// post that is meant to start a conversation.
+const CALL_TO_ACTION = [
+  { re: /\blink in (the )?bio\b/i, label: "link in bio" },
+  { re: /\blink (is )?in the comments\b/i, label: "link in the comments" },
+  { re: /\bDM me\b/i, label: "DM me" },
+  { re: /\bsend me a (DM|message)\b/i, label: "send me a DM" },
+  { re: /\bsign up\b/i, label: "sign up" },
+  { re: /\b(book|schedule) (a|your) (call|demo|consult)/i, label: "book a call" },
+  { re: /\bget started (today|now)\b/i, label: "get started today" },
+  { re: /\bclick (the|this) link\b/i, label: "click the link" },
+  { re: /\b(join|register|enroll) (now|today)\b/i, label: "join now" },
+  { re: /\bfree trial\b/i, label: "free trial" },
+  { re: /\b(buy|order|purchase) (it |the |your )?(now|today)\b/i, label: "buy now" },
+  { re: /\bgrab (your|a) copy\b/i, label: "grab your copy" },
+  { re: /\bcheck (it|us) out at\b/i, label: "check it out at" },
+  { re: /crash101\.com/i, label: "a crash101.com link" },
+  { re: /https?:\/\//i, label: "a link" },
+];
+
+export const INTENTS = ["conversation", "insight", "story", "offer"];
+
+export function isOffer(post) {
+  return post && post.intent === "offer";
+}
+
+// Hype, wherever it appears.
+export function scanHype(text) {
+  const source = String(text || "");
+  return HARD_SELL.filter((p) => p.re.test(source)).map((p) => ({ label: p.label, severity: "block" }));
+}
+
+// Asks that do not belong in a post which is not meant to sell.
+export function scanSelling(text) {
+  const source = String(text || "");
+  return CALL_TO_ACTION.filter((p) => p.re.test(source)).map((p) => ({ label: p.label, severity: "block" }));
+}
+
+// The full selling check for one post, given whether it was allocated a sell.
+export function sellingFindings(post) {
+  const body = (post && post.body) || "";
+  const found = scanHype(body);
+  if (!isOffer(post)) {
+    for (const hit of scanSelling(body)) {
+      found.push({ ...hit, label: `${hit.label} in a post that is not meant to sell` });
+    }
+  }
+  return found;
+}
