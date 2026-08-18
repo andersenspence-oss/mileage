@@ -161,15 +161,36 @@ Zero produces a week that sells nothing at all.
 - **Tag separator** controls how the tag line is displayed and copied. The
   *Post + tags* button always uses spaces, because that is what the composers
   parse.
-- **Model.** Opus 5 is the default and writes the best copy. Sonnet 5 is cheaper
-  and faster and noticeably blander.
+- **Models.** Each platform runs on its own model, set in Settings. Out of the
+  box, research, planning, LinkedIn, Instagram and Facebook run on Opus 5, and X
+  runs on Sonnet 5. X posts are short and structural, so they lose the least
+  from the cheaper model, while a LinkedIn post is where the voice does the most
+  work. If X copy ever reads flat, switch it back; that is the one to watch.
+  There is an "Everything on Opus" button when you want the run at full quality.
 
 ## What a run costs
 
-The Write tab shows an estimate before you start. A full seven-day run across
-all four platforms is roughly 30 API calls, about four minutes, and somewhere
-around two to five dollars of API usage on Opus 5. A single platform for a week
-is well under a dollar.
+The Write tab shows an estimate before you start, and the Settings screen shows
+what the current model mix costs against running everything on Opus.
+
+A full seven-day run across all four platforms is about 30 API calls and four
+minutes. Rough figures for the low end of the estimate:
+
+| Setup | A seven-day run |
+|---|---|
+| Everything on Opus 5 | about $1.87 |
+| Default mix, X on Sonnet 5 | about $1.70 |
+| X, Instagram and Facebook on Sonnet 5 | about $1.31 |
+| Everything on Sonnet 5 | about $1.12 |
+
+Two things keep that down. The brand prompt and the week's research briefing are
+identical on every call, so they are sent once and cached; every later batch
+reads them at a tenth of the input price. And each platform pays only for the
+model it actually needs.
+
+Because the two setup calls are paid once and caching kicks in after the first
+batch, longer runs cost less per day. Fourteen days is not twice the price of
+seven.
 
 ## Troubleshooting
 
@@ -187,7 +208,7 @@ is well under a dollar.
 ## Development
 
 ```
-npm test        # 47 tests over the counting, limits, voice, selling cadence and export logic
+npm test        # 60 tests over the counting, limits, voice, selling cadence, cost model and export logic
 ```
 
 The app is plain ES modules with no build step and no dependencies, matching the

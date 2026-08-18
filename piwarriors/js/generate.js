@@ -260,11 +260,6 @@ ${budgetBrief(platform, settings)}
 
 ${sellingBrief(offersAllowed, count)}
 ${historyBrief(history)}
-Research briefing behind this week:
----
-${signals}
----
-
 For each post:
 - "hook" is the opening line exactly as it appears at the start of the body. It is not a separate headline.
 - "body" is the complete post, ready to paste. No surrounding quotes, no markdown, no labels, no "Post 1:" prefix. Line breaks are real line breaks.
@@ -288,7 +283,21 @@ Write them the way Dr. Spence types, not the way a marketing tool writes.`;
     apiKey,
     model,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: prompt }],
+    // The briefing is identical for every batch in a run, so it goes in its own
+    // block with a cache breakpoint ahead of the per-batch instructions.
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Research briefing behind this week:\n---\n${signals}\n---`,
+            cache_control: { type: "ephemeral" },
+          },
+          { type: "text", text: prompt },
+        ],
+      },
+    ],
     schema: postsSchema(),
     maxTokens: 24000,
     effort: "high",
@@ -575,7 +584,7 @@ export function allocateOffers(platforms, days, perWeek) {
  */
 export async function runWeek({
   apiKey,
-  model,
+  models,
   platforms,
   dayCount,
   startDate,
@@ -593,7 +602,7 @@ export async function runWeek({
   report("signals", "Searching for what the market is talking about");
   const signals = await gatherSignals({
     apiKey,
-    model,
+    model: models.plan,
     platforms,
     notes,
     signal,
@@ -603,7 +612,7 @@ export async function runWeek({
   report("plan", "Laying out the week");
   const plan = await buildPlan({
     apiKey,
-    model,
+    model: models.plan,
     platforms,
     days,
     startDate,
@@ -645,6 +654,7 @@ export async function runWeek({
 
   let done = 0;
   const results = await pooled(chunks, CONCURRENCY, async (chunk) => {
+    const model = models[chunk.platform] || models.plan;
     const ctx = { apiKey, model, platform: chunk.platform, settings, signal, onNote, offersAllowed: chunk.offersAllowed };
     let posts = [];
     try {
@@ -681,9 +691,9 @@ export async function runWeek({
     startDate,
     dayCount,
     platforms,
-    model,
     weekTheme: plan.weekTheme,
     rationale: plan.rationale,
+    models: { ...models },
     offersPerWeek: settings.offersPerWeek ?? 1,
     signals,
     days: planDays,

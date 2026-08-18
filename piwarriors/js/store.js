@@ -10,7 +10,16 @@ const MAX_RUNS = 8;
 
 export const DEFAULT_SETTINGS = {
   apiKey: "",
-  model: "claude-opus-5",
+  // Each platform can run on its own model. "plan" covers the research search
+  // and the week plan, which shape everything downstream and stay on the best
+  // model by default.
+  models: {
+    plan: "claude-opus-5",
+    linkedin: "claude-opus-5",
+    instagram: "claude-opus-5",
+    facebook: "claude-opus-5",
+    x: "claude-sonnet-5",
+  },
   platforms: ["linkedin", "instagram", "facebook", "x"],
   dayCount: 7,
   perDay: { linkedin: 1, instagram: 3, facebook: 3, x: 6 },
@@ -45,11 +54,24 @@ function write(key, value) {
 
 export function loadSettings() {
   const stored = read(SETTINGS_KEY, {});
-  return {
+
+  // Settings saved before per-platform models carried a single "model". Honour
+  // that choice across the board rather than silently moving a platform onto a
+  // different model than the one that was picked.
+  const models = stored.models
+    ? { ...DEFAULT_SETTINGS.models, ...stored.models }
+    : stored.model
+      ? Object.fromEntries(Object.keys(DEFAULT_SETTINGS.models).map((k) => [k, stored.model]))
+      : { ...DEFAULT_SETTINGS.models };
+
+  const settings = {
     ...DEFAULT_SETTINGS,
     ...stored,
     perDay: { ...DEFAULT_SETTINGS.perDay, ...(stored.perDay || {}) },
+    models,
   };
+  delete settings.model;
+  return settings;
 }
 
 export function saveSettings(settings) {

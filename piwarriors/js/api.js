@@ -9,24 +9,67 @@ const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const API_VERSION = "2023-06-01";
 
 export const MODELS = [
-  // Rates are US dollars per million tokens, used only for the rough estimate
-  // shown before a run so a weekly job does not surprise anyone.
-  { id: "claude-opus-5", name: "Opus 5", note: "Best copy. The default.", inRate: 5, outRate: 25 },
-  { id: "claude-sonnet-5", name: "Sonnet 5", note: "Faster and cheaper. Noticeably blander.", inRate: 3, outRate: 15 },
+  // Rates are US dollars per million tokens, used only for the estimate shown
+  // before a run so a weekly job never surprises anyone.
+  { id: "claude-opus-5", name: "Opus 5", note: "Best copy", inRate: 5, outRate: 25 },
+  { id: "claude-sonnet-5", name: "Sonnet 5", note: "Cheaper, a little blander", inRate: 3, outRate: 15 },
 ];
 
-// Measured against the prompts this app actually sends: roughly 4k tokens in and
-// 2.5k out per batch, plus the search and planning calls, plus a margin for the
-// rewrite passes. Deliberately quoted as a range, because it is an estimate.
-export function estimateRun({ model, batches }) {
-  const m = MODELS.find((x) => x.id === model) || MODELS[0];
-  const calls = batches + 2;
-  const inTokens = calls * 4000;
-  const outTokens = calls * 2500;
-  const low = (inTokens * m.inRate + outTokens * m.outRate) / 1e6;
-  // Rewrites are the main variable, so the top of the range assumes a lot of them.
+export const DEFAULT_MODEL = "claude-opus-5";
+
+export function modelInfo(id) {
+  return MODELS.find((m) => m.id === id) || MODELS[0];
+}
+
+// Roughly what one batch costs, measured against the prompts this app actually
+// sends. Output varies most: one long LinkedIn post is cheaper than six short X
+// posts once the hashtags and media briefs are counted.
+const BATCH_TOKENS = {
+  linkedin: { in: 4000, out: 1500 },
+  instagram: { in: 4000, out: 2400 },
+  facebook: { in: 4000, out: 2400 },
+  x: { in: 4000, out: 2000 },
+};
+const SETUP_TOKENS = { in: 3000, out: 2200 };
+
+// The brand prompt and the week's research briefing are identical on every call,
+// so they are cached. Cached reads bill at a tenth of the normal input rate.
+const CACHED_PREFIX_TOKENS = 2600;
+const CACHE_READ_RATE = 0.1;
+
+function inputCost(rate, inTokens, cached) {
+  const fresh = Math.max(0, inTokens - (cached ? CACHED_PREFIX_TOKENS : 0));
+  const reused = cached ? CACHED_PREFIX_TOKENS * CACHE_READ_RATE : 0;
+  return ((fresh + reused) * rate) / 1e6;
+}
+
+/**
+ * Estimates a run, taking each platform's own model into account.
+ *
+ * @param {object} opts
+ * @param {object} opts.models    platform id (and "plan") to model id
+ * @param {string[]} opts.platforms
+ * @param {number} opts.dayCount
+ */
+export function estimateRun({ models = {}, platforms = [], dayCount = 7 }) {
+  const planModel = modelInfo(models.plan || DEFAULT_MODEL);
+  let calls = 2;
+  // The two setup calls come before any cache exists, so they pay full price.
+  let low = inputCost(planModel.inRate, SETUP_TOKENS.in * 2, false) + (SETUP_TOKENS.out * 2 * planModel.outRate) / 1e6;
+
+  for (const platform of platforms) {
+    const m = modelInfo(models[platform] || DEFAULT_MODEL);
+    const t = BATCH_TOKENS[platform] || BATCH_TOKENS.linkedin;
+    for (let day = 0; day < dayCount; day += 1) {
+      calls += 1;
+      // The first batch on each model writes the cache; the rest read it.
+      low += inputCost(m.inRate, t.in, day > 0) + (t.out * m.outRate) / 1e6;
+    }
+  }
+
+  // Rewrite passes are the main variable, so the top of the range assumes many.
   const high = low * 1.8;
-  // Three batches run at once; a batch takes roughly 25 seconds.
+  // Three batches run at once and a batch takes roughly 25 seconds.
   const minutes = Math.max(1, Math.round(((calls / 3) * 25) / 60));
   return { calls, low, high, minutes };
 }
@@ -175,7 +218,15 @@ export async function callClaude(opts) {
     messages,
     output_config: { effort },
   };
-  if (system) body.system = system;
+  if (system) {
+    // The brand prompt is byte-identical on every call of a run, so it is worth
+    // caching: repeat reads bill at a tenth of the normal input rate. A plain
+    // string is wrapped here so callers do not have to know about block shapes.
+    body.system =
+      typeof system === "string"
+        ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+        : system;
+  }
   if (tools && tools.length) body.tools = tools;
   // Structured output and the web search tool are kept on separate calls: search
   // results carry citations, which the JSON output format rejects.

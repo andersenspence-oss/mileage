@@ -2,7 +2,7 @@
 
 import { PLATFORMS, PLATFORM_ORDER, postsPerDay } from "./limits.js";
 import { PILLARS } from "./brand.js";
-import { MODELS, testConnection, estimateRun } from "./api.js";
+import { MODELS, modelInfo, testConnection, estimateRun } from "./api.js";
 import { runWeek, buildDays, allocateOffers } from "./generate.js";
 import { loadSettings, saveSettings, loadRuns, saveRun, deleteRun, getRun, historyFor, storageUsage } from "./store.js";
 import { el, clear, copyButton, toast, download, formatDate } from "./ui.js";
@@ -170,8 +170,9 @@ function renderWrite() {
     const days = buildDays(state.settings.startDate || todayISO(), state.settings.dayCount);
     const last = days[days.length - 1];
     const est = estimateRun({
-      model: state.settings.model,
-      batches: state.settings.platforms.length * state.settings.dayCount,
+      models: state.settings.models,
+      platforms: state.settings.platforms,
+      dayCount: state.settings.dayCount,
     });
     const selling = Object.keys(
       allocateOffers(state.settings.platforms, days, state.settings.offersPerWeek ?? 1)
@@ -267,7 +268,7 @@ async function startRun() {
   try {
     const run = await runWeek({
       apiKey: s.apiKey,
-      model: s.model,
+      models: s.models,
       platforms: s.platforms,
       dayCount: s.dayCount,
       startDate: s.startDate || todayISO(),
@@ -556,8 +557,18 @@ function renderSettings() {
         status.textContent = "Checking...";
         status.className = "small muted";
         try {
-          const reply = await testConnection(state.settings.apiKey, state.settings.model);
-          status.textContent = `Working. The model replied "${reply}".`;
+          // Every distinct model in the mix is checked, because a key can be
+          // valid and still lack access to one of them.
+          const used = [...new Set(Object.values(state.settings.models))];
+          const results = [];
+          for (const id of used) {
+            await testConnection(state.settings.apiKey, id);
+            results.push(modelInfo(id).name);
+          }
+          status.textContent =
+            results.length > 1
+              ? `Working. ${results.join(" and ")} both replied.`
+              : `Working. ${results[0]} replied.`;
           status.className = "small ok";
         } catch (err) {
           status.textContent = err.message || String(err);
@@ -570,18 +581,66 @@ function renderSettings() {
   keyCard.appendChild(status);
   view.appendChild(keyCard);
 
-  const modelCard = el("div", { class: "card" }, [el("h2", { text: "Model" })]);
-  const select = el("select", {
-    onchange: (e) => {
-      state.settings.model = e.target.value;
-      persist();
-      render();
-    },
-  });
-  for (const m of MODELS) {
-    select.appendChild(el("option", { value: m.id, text: `${m.name} — ${m.note}`, selected: m.id === s.model }));
+  const modelCard = el("div", { class: "card" }, [
+    el("h2", { text: "Models" }),
+    el("p", { class: "small muted", style: "margin-bottom:6px", text: "Each platform can run on its own model. Opus writes the better copy; Sonnet is cheaper and reads blander. Research and planning shape the whole week, so they are worth keeping on Opus." }),
+  ]);
+
+  const modelRows = [
+    ["plan", "Research and planning"],
+    ...PLATFORM_ORDER.filter((id) => s.platforms.includes(id)).map((id) => [id, PLATFORMS[id].name]),
+  ];
+
+  for (const [key, label] of modelRows) {
+    const field = el("div", { class: "field" }, [el("span", { text: label })]);
+    const select = el("select", {
+      onchange: (e) => {
+        state.settings.models = { ...state.settings.models, [key]: e.target.value };
+        persist();
+        render();
+      },
+    });
+    for (const m of MODELS) {
+      select.appendChild(
+        el("option", { value: m.id, text: `${m.name} — ${m.note}`, selected: m.id === s.models[key] })
+      );
+    }
+    field.appendChild(select);
+    modelCard.appendChild(field);
   }
-  modelCard.appendChild(select);
+
+  // What the current mix actually costs, so the tradeoff is visible where it is
+  // being made rather than only on the Write tab.
+  const mixEst = estimateRun({ models: s.models, platforms: s.platforms, dayCount: s.dayCount });
+  const allOpus = estimateRun({
+    models: Object.fromEntries(Object.keys(s.models).map((k) => [k, "claude-opus-5"])),
+    platforms: s.platforms,
+    dayCount: s.dayCount,
+  });
+  const saved = allOpus.low - mixEst.low;
+  modelCard.appendChild(
+    el("p", { class: "small muted", style: "margin-top:10px", text:
+      `A ${s.dayCount}-day run on this mix is about $${mixEst.low.toFixed(2)}. ` +
+      (saved > 0.005
+        ? `All Opus would be about $${allOpus.low.toFixed(2)}, so this saves roughly $${saved.toFixed(2)} a run.`
+        : `That is the highest-quality setting.`) })
+  );
+
+  const quickRow = el("div", { class: "row", style: "margin-top:10px" });
+  for (const [label, id] of [["Everything on Opus", "claude-opus-5"], ["Everything on Sonnet", "claude-sonnet-5"]]) {
+    quickRow.appendChild(
+      el("button", {
+        class: "quiet",
+        text: label,
+        onclick: () => {
+          state.settings.models = Object.fromEntries(Object.keys(state.settings.models).map((k) => [k, id]));
+          persist();
+          render();
+        },
+      })
+    );
+  }
+  modelCard.appendChild(quickRow);
   view.appendChild(modelCard);
 
   const rules = el("div", { class: "card" }, [el("h2", { text: "Platform rules" })]);
