@@ -63,6 +63,10 @@ On each iPhone, in **Safari**:
 
 ---
 
+## Also in this repo: PI Warriors Copy Studio
+
+The `piwarriors/` folder is a separate, self-contained app that writes a week of PI Warriors social copy for X, Facebook, LinkedIn and Instagram in one run. Each post comes back inside its platform's character limit, with a one-tap copy button, a comma-separated hashtag and tag line, and an image or video brief. It needs an Anthropic API key, which is stored on the phone only. It lives at `https://YOURUSERNAME.github.io/mileage/piwarriors/`. See [`piwarriors/README.md`](piwarriors/README.md).
+
 ## Also in this repo: the E6B flight computer
 
 The `e6b/` folder is a separate, self-contained app — an offline electronic E6B flight computer (true airspeed, density altitude, wind triangle, weight and balance, nav log, holding entries, METAR decoder and study tables). It shares nothing with the mileage tracker except the GitHub Pages hosting, and lives at `https://YOURUSERNAME.github.io/mileage/e6b/`. See [`e6b/README.md`](e6b/README.md).

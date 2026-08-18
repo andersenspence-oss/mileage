@@ -1,0 +1,10 @@
+{
+  "name": "pi-warriors-copy-studio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Weekly PI Warriors social copy for X, Facebook, LinkedIn and Instagram (PWA)",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}
