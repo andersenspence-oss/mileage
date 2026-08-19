@@ -206,7 +206,14 @@ function renderWrite() {
   const runCard = el("div", { class: "card" });
   if (state.running) {
     runCard.appendChild(el("h2", { text: state.progress.stage || "Working" }));
-    runCard.appendChild(el("p", { class: "small muted", text: state.progress.detail || "" }));
+    runCard.appendChild(
+      el("p", { class: "small muted" }, [
+        el("span", { text: state.progress.detail || "" }),
+        el("span", { text: " " }),
+        // Ticks every second so a slow step is obviously alive.
+        el("span", { id: "elapsed", class: "small muted", text: elapsedLabel() }),
+      ])
+    );
     const bar = el("div", { class: "progress" }, [el("i", { style: `width:${Math.round(state.progress.pct * 100)}%` })]);
     runCard.appendChild(bar);
     const log = el("div", { class: "log" });
@@ -240,6 +247,28 @@ function renderWrite() {
   view.appendChild(runCard);
 }
 
+function elapsedLabel() {
+  if (!state.progress.startedAt) return "";
+  const seconds = Math.round((Date.now() - state.progress.startedAt) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+let tick = null;
+function startTicking() {
+  stopTicking();
+  tick = setInterval(() => {
+    const node = document.getElementById("elapsed");
+    // Updated directly rather than through a re-render, so typing and scrolling
+    // are not interrupted once a second.
+    if (node) node.textContent = elapsedLabel();
+  }, 1000);
+}
+function stopTicking() {
+  if (tick) clearInterval(tick);
+  tick = null;
+}
+
 function stepper(value, min, max, onChange) {
   const wrap = el("div", { class: "stepper" });
   const label = el("span", { class: "n", text: String(value) });
@@ -259,8 +288,9 @@ async function startRun() {
   const s = state.settings;
   state.running = true;
   state.controller = new AbortController();
-  state.progress = { stage: "Starting", detail: "", pct: 0.02, log: [] };
+  state.progress = { stage: "Starting", detail: "", pct: 0.02, log: [], startedAt: Date.now() };
   render();
+  startTicking();
 
   const totalChunks = s.platforms.length * s.dayCount;
   let written = 0;
@@ -292,7 +322,16 @@ async function startRun() {
         render();
       },
       onNote: (line) => {
-        state.progress.log.push(line);
+        const log = state.progress.log;
+        const previous = log[log.length - 1] || "";
+        // "Searching" arrives once per search, so collapse the repeats.
+        const base = previous.replace(/ \u00d7\d+$/, "");
+        if (base === line) {
+          const count = Number((previous.match(/ \u00d7(\d+)$/) || [])[1] || 1) + 1;
+          log[log.length - 1] = `${line} \u00d7${count}`;
+        } else {
+          log.push(line);
+        }
         render();
       },
     });
@@ -301,6 +340,7 @@ async function startRun() {
     state.currentRunId = run.id;
     state.running = false;
     state.controller = null;
+    stopTicking();
 
     const failed = runErrors(run);
     if (failed.length) {
@@ -313,6 +353,7 @@ async function startRun() {
   } catch (err) {
     state.running = false;
     state.controller = null;
+    stopTicking();
     if (err && err.name === "AbortError") {
       toast("Stopped");
     } else {

@@ -23,7 +23,7 @@ const CONCURRENCY = 3;
 // Public conversation is what a static page can actually reach. The API's web
 // search runs server-side, so this works from a phone with no scraper and no
 // platform credentials. Anything private the user has seen goes in the notes box.
-export async function gatherSignals({ apiKey, model, platforms, notes, onProgress, signal }) {
+export async function gatherSignals({ apiKey, model, platforms, notes, onProgress, onNote, signal }) {
   const platformNames = platforms.map((p) => PLATFORMS[p].name).join(", ");
   const prompt = `Search the web for what is being discussed right now, this week, in the personal injury provider world. You are looking for raw material for social copy aimed at PI providers.
 
@@ -63,8 +63,17 @@ Be concrete. Do not pad. If a section has nothing real behind it, write "Nothing
     messages: [{ role: "user", content: prompt }],
     tools: [WEB_SEARCH_TOOL],
     maxTokens: 16000,
-    effort: "high",
+    // Research is gathering, not composing. Medium keeps this step from being
+    // the slowest part of a run by a wide margin.
+    effort: "medium",
     onProgress,
+    // Web search runs quietly for a long stretch, so say what it is doing.
+    onEvent: (e) => {
+      if (!onNote) return;
+      if (e.type === "block" && e.kind === "server_tool_use") onNote("Searching");
+      else if (e.type === "block" && e.kind === "text") onNote("Writing the briefing");
+      else if (e.type === "resumed") onNote(`Still searching (round ${e.round + 1})`);
+    },
     signal,
   });
   return res.text.trim();
@@ -605,6 +614,7 @@ export async function runWeek({
     model: models.plan,
     platforms,
     notes,
+    onNote,
     signal,
     onProgress: onPartial ? (t) => onPartial("signals", t) : undefined,
   });

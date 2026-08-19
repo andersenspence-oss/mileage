@@ -209,6 +209,13 @@ first FAIL line is the one to fix.
   with a growing delay before giving up.
 - **A batch failed** — the results page lists which platform and day failed and
   why. Everything else in the run is still there. Run it again for the rest.
+- **It looks stuck on "Reading the room"** — the research step runs web searches
+  server-side and is the slowest part of a run, often a minute or two. The
+  progress card shows a running clock and says what it is doing ("Searching",
+  "Still searching", "Writing the briefing"), so a slow step is easy to tell
+  apart from a dead one. If nothing at all comes back for two and a half
+  minutes, the app gives up on that request and says so rather than sitting
+  there.
 - **Copy did not work** — the button turns red and says to press and hold. This
   only happens on much older browsers; the text is selectable either way.
 - **The phone shows an old version** — close the app fully and reopen it twice.

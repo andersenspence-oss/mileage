@@ -7,7 +7,7 @@
 
 // Shown in Settings so it is possible to tell, from the phone, whether the app
 // actually picked up the latest deploy.
-export const BUILD = "2026-08-19a";
+export const BUILD = "2026-08-19b";
 
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const API_VERSION = "2023-06-01";
@@ -137,20 +137,24 @@ async function readError(response) {
   });
 }
 
-// Parses the SSE stream, handing back accumulated text as it arrives so the UI
-// can show real progress instead of a spinner that lies.
-async function readStream(response, onProgress) {
+// Parses the SSE stream. Content blocks are rebuilt as they arrive so a paused
+// turn can be resumed, and so the caller can see that a long web search is
+// actually doing something rather than hanging.
+async function readStream(response, { onProgress, onEvent, onHeartbeat }) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let text = "";
   let stopReason = null;
   let stopDetails = null;
+  const blocks = [];
+  const partialJson = [];
   const usage = { input_tokens: 0, output_tokens: 0 };
 
-  while (true) {
+  for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    if (onHeartbeat) onHeartbeat();
     buffer += decoder.decode(value, { stream: true });
 
     // SSE frames are separated by a blank line; keep any partial frame.
@@ -168,10 +172,35 @@ async function readStream(response, onProgress) {
         } catch {
           continue;
         }
-        if (event.type === "content_block_delta" && event.delta) {
-          if (event.delta.type === "text_delta" && event.delta.text) {
-            text += event.delta.text;
+
+        if (event.type === "content_block_start") {
+          blocks[event.index] = { ...event.content_block };
+          partialJson[event.index] = "";
+          const kind = event.content_block && event.content_block.type;
+          if (onEvent && kind) onEvent({ type: "block", kind });
+        } else if (event.type === "content_block_delta" && event.delta) {
+          const block = blocks[event.index];
+          const d = event.delta;
+          if (d.type === "text_delta") {
+            text += d.text || "";
+            if (block) block.text = (block.text || "") + (d.text || "");
             if (onProgress) onProgress(text);
+          } else if (d.type === "thinking_delta" && block) {
+            block.thinking = (block.thinking || "") + (d.thinking || "");
+          } else if (d.type === "signature_delta" && block) {
+            block.signature = d.signature;
+          } else if (d.type === "input_json_delta") {
+            partialJson[event.index] = (partialJson[event.index] || "") + (d.partial_json || "");
+          }
+        } else if (event.type === "content_block_stop") {
+          const block = blocks[event.index];
+          const raw = partialJson[event.index];
+          if (block && raw) {
+            try {
+              block.input = JSON.parse(raw);
+            } catch {
+              /* leave the block as it stands */
+            }
           }
         } else if (event.type === "message_delta") {
           if (event.delta && event.delta.stop_reason) stopReason = event.delta.stop_reason;
@@ -189,11 +218,18 @@ async function readStream(response, onProgress) {
     }
   }
 
-  return { text, stopReason, stopDetails, usage };
+  return { text, stopReason, stopDetails, usage, content: blocks.filter(Boolean) };
 }
 
+// A request that produces no bytes for this long is treated as stalled. Web
+// search can be quiet for a while, so this is generous.
+const STALL_MS = 150000;
+// A paused turn is resumed at most this many times before giving up.
+const MAX_CONTINUATIONS = 4;
+
 /**
- * One call to the Messages API.
+ * One logical call to the Messages API, including resuming a turn the server
+ * paused part way through a web search.
  *
  * @param {object} opts
  * @param {string} opts.apiKey
@@ -205,12 +241,13 @@ async function readStream(response, onProgress) {
  * @param {number} [opts.maxTokens]
  * @param {string} [opts.effort]       low | medium | high | xhigh | max
  * @param {function} [opts.onProgress] called with accumulated text
+ * @param {function} [opts.onEvent]    called as blocks and continuations arrive
  * @param {AbortSignal} [opts.signal]
  */
 export async function callClaude(opts) {
   const {
     apiKey,
-    model = "claude-opus-5",
+    model = DEFAULT_MODEL,
     system,
     messages,
     schema,
@@ -218,92 +255,147 @@ export async function callClaude(opts) {
     maxTokens = 32000,
     effort = "high",
     onProgress,
+    onEvent,
     signal,
     maxRetries = 4,
   } = opts;
 
   if (!apiKey) throw new ApiError("No API key set. Open Settings and paste one in.", { status: 401 });
 
-  const body = {
+  const base = {
     model,
     max_tokens: maxTokens,
     // Streaming keeps long generations from hitting the request timeout.
     stream: true,
-    messages,
     output_config: { effort },
   };
   if (system) {
     // The brand prompt is byte-identical on every call of a run, so it is worth
     // caching: repeat reads bill at a tenth of the normal input rate. A plain
     // string is wrapped here so callers do not have to know about block shapes.
-    body.system =
+    base.system =
       typeof system === "string"
         ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
         : system;
   }
-  if (tools && tools.length) body.tools = tools;
+  if (tools && tools.length) base.tools = tools;
   // Structured output and the web search tool are kept on separate calls: search
   // results carry citations, which the JSON output format rejects.
-  if (schema) body.output_config.format = { type: "json_schema", schema };
+  if (schema) base.output_config.format = { type: "json_schema", schema };
 
-  let attempt = 0;
-  for (;;) {
-    try {
-      const response = await fetch(ENDPOINT, {
-        method: "POST",
-        headers: headers(apiKey),
-        body: JSON.stringify(body),
-        signal,
-      });
+  // One request, with retries for the failures that are worth retrying.
+  async function once(currentMessages) {
+    let attempt = 0;
+    for (;;) {
+      // Abort the request ourselves if it goes quiet for too long, so a stalled
+      // connection surfaces as an error instead of an app that sits there.
+      const stallController = new AbortController();
+      let timer = null;
+      let stalled = false;
+      const arm = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          stalled = true;
+          stallController.abort();
+        }, STALL_MS);
+      };
+      const onOuterAbort = () => stallController.abort();
+      if (signal) {
+        if (signal.aborted) stallController.abort();
+        else signal.addEventListener("abort", onOuterAbort, { once: true });
+      }
 
-      if (!response.ok) {
-        const err = await readError(response);
-        if (err.retryable && attempt < maxRetries) {
-          const wait = Number(response.headers.get("retry-after")) * 1000 || 2000 * 2 ** attempt;
+      try {
+        arm();
+        const response = await fetch(ENDPOINT, {
+          method: "POST",
+          headers: headers(apiKey),
+          body: JSON.stringify({ ...base, messages: currentMessages }),
+          signal: stallController.signal,
+        });
+        arm();
+
+        if (!response.ok) {
+          const err = await readError(response);
+          if (err.retryable && attempt < maxRetries) {
+            const wait = Number(response.headers.get("retry-after")) * 1000 || 2000 * 2 ** attempt;
+            attempt += 1;
+            await sleep(wait);
+            continue;
+          }
+          throw err;
+        }
+
+        return await readStream(response, { onProgress, onEvent, onHeartbeat: arm });
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          if (stalled) {
+            throw new ApiError(
+              "The API stopped responding part way through. Nothing came back for over two minutes, so the app gave up on that request.",
+              { retryable: true }
+            );
+          }
+          throw err; // the user pressed Stop
+        }
+        // Network-level failures are worth another try; API refusals are not.
+        const networkish = err instanceof TypeError;
+        if (networkish && attempt < maxRetries) {
           attempt += 1;
-          await sleep(wait);
+          await sleep(2000 * 2 ** attempt);
           continue;
         }
+        if (networkish) {
+          throw new ApiError(
+            "Could not reach the API. Check the phone's connection, then run diagnostics in Settings.",
+            { retryable: true }
+          );
+        }
         throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (signal) signal.removeEventListener("abort", onOuterAbort);
       }
-
-      const result = await readStream(response, onProgress);
-
-      if (result.stopReason === "refusal") {
-        throw new ApiError(
-          "The model declined this request" +
-            (result.stopDetails && result.stopDetails.explanation ? `: ${result.stopDetails.explanation}` : "."),
-          { type: "refusal" }
-        );
-      }
-      if (result.stopReason === "max_tokens") {
-        throw new ApiError("The reply was cut off before it finished. Try fewer posts per batch.", {
-          type: "max_tokens",
-          retryable: false,
-        });
-      }
-      return result;
-    } catch (err) {
-      if (err && err.name === "AbortError") throw err;
-      // Network-level failures are worth another try; API refusals are not.
-      const networkish = err instanceof TypeError;
-      if (networkish && attempt < maxRetries) {
-        attempt += 1;
-        await sleep(2000 * 2 ** attempt);
-        continue;
-      }
-      if (networkish) {
-        throw new ApiError(
-          "Could not reach the API. Check the phone's connection, then check the key in Settings.",
-          { retryable: true }
-        );
-      }
-      throw err;
     }
   }
+
+  let conversation = messages;
+  let text = "";
+  let last = null;
+
+  for (let round = 0; round <= MAX_CONTINUATIONS; round += 1) {
+    last = await once(conversation);
+    text += last.text;
+
+    // A server-side tool loop that hits its iteration limit comes back paused.
+    // Sending the assistant turn straight back resumes it; adding a "continue"
+    // message of our own would break that.
+    if (last.stopReason === "pause_turn" && last.content.length) {
+      conversation = [...conversation, { role: "assistant", content: last.content }];
+      if (onEvent) onEvent({ type: "resumed", round: round + 1 });
+      continue;
+    }
+
+    if (last.stopReason === "refusal") {
+      throw new ApiError(
+        "The model declined this request" +
+          (last.stopDetails && last.stopDetails.explanation ? `: ${last.stopDetails.explanation}` : "."),
+        { type: "refusal" }
+      );
+    }
+    if (last.stopReason === "max_tokens") {
+      throw new ApiError("The reply was cut off before it finished. Try fewer posts per batch.", {
+        type: "max_tokens",
+        retryable: false,
+      });
+    }
+    return { ...last, text };
+  }
+
+  // Out of continuations. Whatever was gathered is better than nothing.
+  return { ...last, text };
 }
 
-// Structured replies come back as a single JSON text block.
+
 export function parseJson(text, what = "reply") {
   const trimmed = String(text || "").trim();
   try {
@@ -331,7 +423,9 @@ export function parseJson(text, what = "reply") {
   }
 }
 
-export const WEB_SEARCH_TOOL = { type: "web_search_20260209", name: "web_search" };
+// Capped so a research step cannot wander for minutes. Eight searches is plenty
+// for a weekly briefing and keeps the call inside a predictable window.
+export const WEB_SEARCH_TOOL = { type: "web_search_20260209", name: "web_search", max_uses: 8 };
 
 // A cheap round trip that proves the key, the model and the browser CORS path
 // all work, so failures surface in Settings instead of mid-run.
