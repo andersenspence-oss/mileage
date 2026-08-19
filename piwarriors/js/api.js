@@ -5,6 +5,10 @@
 // it means the key lives in this device's local storage — see the note in
 // Settings. Nothing is proxied through any third party.
 
+// Shown in Settings so it is possible to tell, from the phone, whether the app
+// actually picked up the latest deploy.
+export const BUILD = "2026-08-19a";
+
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const API_VERSION = "2023-06-01";
 
@@ -110,12 +114,22 @@ async function readError(response) {
   } catch {
     detail = await response.text().catch(() => "");
   }
-  const friendly = {
-    401: "The API key was rejected. Check it in Settings.",
+  const lower = String(detail).toLowerCase();
+  let friendly = {
+    401: "The API key was rejected. Check it in Settings, and make sure it was copied whole.",
     403: "That API key is not allowed to use this model.",
     429: "Rate limited by the API. The app will wait and retry.",
     529: "The API is overloaded. The app will wait and retry.",
   }[response.status];
+
+  // A brand new API account has no credit on it, which is the first wall most
+  // people hit. The API's own wording is easy to skim past, so say it plainly.
+  if (lower.includes("credit balance")) {
+    friendly =
+      "The Anthropic account behind this key has no API credit. A Claude.ai subscription does not cover API use: add credit under Billing at console.anthropic.com, then try again.";
+  } else if (lower.includes("model") && lower.includes("not found")) {
+    friendly = "This key cannot reach that model. Try a different model in Settings.";
+  }
   return new ApiError(friendly || detail || `Request failed (${response.status}).`, {
     status: response.status,
     type,
@@ -321,13 +335,97 @@ export const WEB_SEARCH_TOOL = { type: "web_search_20260209", name: "web_search"
 
 // A cheap round trip that proves the key, the model and the browser CORS path
 // all work, so failures surface in Settings instead of mid-run.
+// Opus 5 thinks before it answers unless told otherwise, and those thinking
+// tokens count against max_tokens. A tiny ceiling here means the reply is cut
+// off mid-thought every time, so the test has to leave real room.
 export async function testConnection(apiKey, model) {
   const res = await callClaude({
     apiKey,
     model,
-    maxTokens: 16,
+    maxTokens: 2048,
     effort: "low",
     messages: [{ role: "user", content: "Reply with the single word: ready" }],
   });
-  return res.text.trim();
+  return res.text.trim() || "(no text)";
+}
+
+export function describeError(err) {
+  if (!err) return "Unknown error.";
+  const bits = [];
+  if (err.status) bits.push(`HTTP ${err.status}`);
+  if (err.type) bits.push(err.type);
+  const where = bits.length ? ` (${bits.join(", ")})` : "";
+  return `${err.message || String(err)}${where}`;
+}
+
+/**
+ * Works through what a run needs, one capability at a time, so a failure points
+ * at the thing that actually broke instead of "it did not work".
+ */
+export async function diagnose({ apiKey, models = {}, onStep, signal }) {
+  const results = [];
+  const run = async (name, fn) => {
+    if (onStep) onStep({ name, state: "running" });
+    try {
+      const detail = await fn();
+      results.push({ name, ok: true, detail });
+      if (onStep) onStep({ name, state: "ok", detail });
+    } catch (err) {
+      const detail = describeError(err);
+      results.push({ name, ok: false, detail });
+      if (onStep) onStep({ name, state: "fail", detail });
+    }
+  };
+
+  const planModel = models.plan || DEFAULT_MODEL;
+
+  await run("Reaching the API", async () => {
+    const res = await callClaude({
+      apiKey, model: planModel, maxTokens: 2048, effort: "low", signal,
+      messages: [{ role: "user", content: "Reply with the single word: ready" }],
+    });
+    return res.text.trim() || "(replied with no text)";
+  });
+
+  // No point testing the rest if the key itself cannot get through.
+  if (!results[0].ok) return results;
+
+  await run("Structured replies", async () => {
+    const res = await callClaude({
+      apiKey, model: planModel, maxTokens: 2048, effort: "low", signal,
+      messages: [{ role: "user", content: 'Return {"ok": true}.' }],
+      schema: {
+        type: "object",
+        properties: { ok: { type: "boolean" } },
+        required: ["ok"],
+        additionalProperties: false,
+      },
+    });
+    parseJson(res.text, "reply");
+    return "working";
+  });
+
+  await run("Web search", async () => {
+    const res = await callClaude({
+      apiKey, model: planModel, maxTokens: 4096, effort: "low", signal,
+      tools: [WEB_SEARCH_TOOL],
+      messages: [{ role: "user", content: "Search the web for today's date and say what it is, in under 20 words." }],
+    });
+    return res.text.trim().slice(0, 80) || "(no text)";
+  });
+
+  // Each platform's model has to be reachable by this key in its own right.
+  const extra = [...new Set(Object.entries(models).filter(([k]) => k !== "plan").map(([, v]) => v))]
+    .filter((m) => m && m !== planModel);
+  for (const model of extra) {
+    await run(`Model ${modelInfo(model).name}`, async () => {
+      const res = await callClaude({
+        apiKey, model, maxTokens: 2048, effort: "low", signal,
+        messages: [{ role: "user", content: "Reply with the single word: ready" }],
+      });
+      return res.text.trim() || "(replied with no text)";
+    });
+  }
+
+  return results;
 }

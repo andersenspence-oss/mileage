@@ -2,7 +2,7 @@
 
 import { PLATFORMS, PLATFORM_ORDER, postsPerDay } from "./limits.js";
 import { PILLARS } from "./brand.js";
-import { MODELS, modelInfo, testConnection, estimateRun } from "./api.js";
+import { MODELS, modelInfo, testConnection, estimateRun, diagnose, BUILD } from "./api.js";
 import { runWeek, buildDays, allocateOffers } from "./generate.js";
 import { loadSettings, saveSettings, loadRuns, saveRun, deleteRun, getRun, historyFor, storageUsage } from "./store.js";
 import { el, clear, copyButton, toast, download, formatDate } from "./ui.js";
@@ -196,8 +196,8 @@ function renderWrite() {
       value: state.settings.notes || "",
       oninput: (e) => {
         state.settings.notes = e.target.value;
+        persist();
       },
-      onchange: persist,
     }),
   ]);
   view.appendChild(notesCard);
@@ -537,10 +537,13 @@ function renderSettings() {
       autocomplete: "off",
       autocapitalize: "off",
       spellcheck: "false",
+      // Saved on every keystroke rather than on blur. A change event only fires
+      // when the field loses focus, so pasting a key and going straight to a
+      // button left it in memory and lost it on the next app start.
       oninput: (e) => {
         state.settings.apiKey = e.target.value.trim();
+        persist();
       },
-      onchange: persist,
     }),
     el("p", { class: "small muted", style: "margin-top:8px", text: "The key is stored on this phone only and is sent straight to Anthropic. Nothing passes through any other server. Anyone who can unlock this phone can read it, so use a key you can rotate." }),
   ]);
@@ -579,6 +582,47 @@ function renderSettings() {
     })
   );
   keyCard.appendChild(status);
+
+  // A staged check, because "it did not work" is not something you can act on
+  // from a phone with no developer tools.
+  const steps = el("div", { class: "log", style: "margin-top:10px" });
+  keyCard.appendChild(
+    el("button", {
+      class: "wide quiet",
+      style: "margin-top:8px",
+      text: "Run full diagnostics",
+      onclick: async (e) => {
+        const button = e.currentTarget;
+        button.disabled = true;
+        clear(steps);
+        const lines = new Map();
+        const paint = ({ name, state, detail }) => {
+          if (!lines.has(name)) {
+            const node = el("div");
+            lines.set(name, node);
+            steps.appendChild(node);
+          }
+          const node = lines.get(name);
+          const mark = state === "ok" ? "PASS" : state === "fail" ? "FAIL" : "....";
+          node.className = state === "fail" ? "err" : state === "ok" ? "ok" : "muted";
+          node.textContent = `${mark}  ${name}${detail ? ` — ${detail}` : ""}`;
+        };
+        try {
+          const results = await diagnose({ apiKey: state.settings.apiKey, models: state.settings.models, onStep: paint });
+          const failed = results.filter((r) => !r.ok);
+          status.textContent = failed.length
+            ? `${failed.length} check${failed.length === 1 ? "" : "s"} failed. The first failure is the one to fix.`
+            : "Everything the app needs is working.";
+          status.className = failed.length ? "small err" : "small ok";
+        } catch (err) {
+          status.textContent = err.message || String(err);
+          status.className = "small err";
+        }
+        button.disabled = false;
+      },
+    })
+  );
+  keyCard.appendChild(steps);
   view.appendChild(keyCard);
 
   const modelCard = el("div", { class: "card" }, [
@@ -715,7 +759,7 @@ function renderSettings() {
   view.appendChild(dataCard);
 
   view.appendChild(
-    el("p", { class: "small muted center", style: "padding:6px 0 12px", text: "PI Warriors Copy Studio" })
+    el("p", { class: "small muted center", style: "padding:6px 0 12px", text: `PI Warriors Copy Studio · build ${BUILD}` })
   );
 }
 

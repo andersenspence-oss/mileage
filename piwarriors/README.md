@@ -194,8 +194,17 @@ seven.
 
 ## Troubleshooting
 
-- **"The API key was rejected"** — the key is wrong or has been revoked. Paste it
-  again in Settings and use Test the connection.
+Settings has a **Run full diagnostics** button. It works through what a run
+needs, one capability at a time, and stops at the first thing that is broken:
+reaching the API, structured replies, web search, and each platform's model. The
+first FAIL line is the one to fix.
+
+- **"The Anthropic account behind this key has no API credit"** — the most common
+  first wall. API usage is billed separately from a Claude.ai subscription, and a
+  new account starts with nothing on it. Add credit under Billing at
+  console.anthropic.com.
+- **"The API key was rejected"** — the key is wrong, was truncated when copied,
+  or has been revoked. Paste it again in Settings.
 - **"Could not reach the API"** — usually the phone's connection. The app retries
   with a growing delay before giving up.
 - **A batch failed** — the results page lists which platform and day failed and
@@ -203,7 +212,8 @@ seven.
 - **Copy did not work** — the button turns red and says to press and hold. This
   only happens on much older browsers; the text is selectable either way.
 - **The phone shows an old version** — close the app fully and reopen it twice.
-  The first open downloads the update, the second runs it.
+  The first open downloads the update, the second runs it. The build number at
+  the bottom of Settings tells you which version the phone is actually running.
 
 ## Development
 

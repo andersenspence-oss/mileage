@@ -1,6 +1,6 @@
 // Network-first with a cache fallback, matching the other apps on this origin.
 // The shell works offline; writing copy always needs the network.
-const CACHE = "piwarriors-v1";
+const CACHE = "piwarriors-v2";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest",
   "css/app.css",
