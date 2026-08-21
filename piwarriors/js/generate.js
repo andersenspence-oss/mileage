@@ -14,7 +14,8 @@ import {
   bodyBudget,
 } from "./limits.js";
 import { scanPost, blockers, normalizePunctuation, sellingFindings, INTENTS } from "./voice.js";
-import { auditClaims, CLAIM_BASES } from "./claims.js";
+import { auditClaims, verdictProblems, CLAIM_BASES } from "./claims.js";
+import { verifyPost } from "./verify.js";
 
 const MAX_REPAIR_ROUNDS = 3;
 const CONCURRENCY = 3;
@@ -375,8 +376,14 @@ function problemReport(platform, post, settings, offerAllowed = false, briefing 
   }
   // Outside facts must be traceable. This is the check that keeps a wrong bill
   // number from going out under his name.
-  for (const problem of auditClaims(post, briefing).problems) {
+  for (const problem of auditClaims(post, briefing, { mode: settings.factMode || "own-experience" }).problems) {
     lines.push(problem);
+  }
+  // In verified mode a claim also has to survive being looked up.
+  if ((settings.factMode || "own-experience") === "verified-facts") {
+    for (const problem of verdictProblems((post.claims || []).filter((c) => c.basis === "briefing"))) {
+      lines.push(problem);
+    }
   }
 
   if (post.intent === "offer" && !offerAllowed) {
@@ -472,7 +479,31 @@ async function finishChunk(ctx, posts) {
   const { apiKey, model, platform, settings, signal, onNote, offersAllowed = 0, briefing = "" } = ctx;
   let current = posts;
 
+  const verifying = (settings.factMode || "own-experience") === "verified-facts";
+
+  // Looks up any outside fact that has not been checked yet. A rewrite returns
+  // fresh claims, so this has to run again after every rewrite, and once more
+  // after the last one, or a post that was correctly fixed would be held back
+  // for never having been checked.
+  async function verifyPending(posts) {
+    if (!verifying) return posts;
+    for (let i = 0; i < posts.length; i += 1) {
+      const post = posts[i];
+      const needs = (post.claims || []).some((c) => c.basis === "briefing" && !c.verification);
+      if (!needs) continue;
+      const checked = await verifyPost({ apiKey, model, post, signal, onNote });
+      const byStatement = new Map(checked.map((c) => [c.statement, c]));
+      posts[i] = {
+        ...post,
+        claims: (post.claims || []).map((c) => byStatement.get(c.statement) || c),
+      };
+    }
+    return posts;
+  }
+
   for (let round = 0; round < MAX_REPAIR_ROUNDS; round += 1) {
+    current = await verifyPending(current);
+
     const permitted = offerAllowance(current, offersAllowed);
     const broken = [];
     current.forEach((post, index) => {
@@ -505,6 +536,9 @@ async function finishChunk(ctx, posts) {
 
   // Deterministic backstop. After this, a post is inside its limits regardless
   // of what the model did.
+  // The last rewrite may have introduced claims nothing has looked at yet.
+  current = await verifyPending(current);
+
   const finalPermitted = offerAllowance(current, offersAllowed);
 
   return current.map((post, index) => {
@@ -517,7 +551,11 @@ async function finishChunk(ctx, posts) {
 
     // Prose cannot be de-sold deterministically, so anything still selling is
     // named on the card rather than shipped quietly.
-    const claimAudit = auditClaims(safe, briefing);
+    const mode = settings.factMode || "own-experience";
+    const claimAudit = auditClaims(safe, briefing, { mode });
+    const verdictFaults = mode === "verified-facts"
+      ? verdictProblems((safe.claims || []).filter((c) => c.basis === "briefing"))
+      : [];
     const stillSelling = sellingFindings(
       offerAllowed ? { ...safe, intent: "offer" } : { ...safe, intent: "conversation" }
     );
@@ -533,6 +571,7 @@ async function finishChunk(ctx, posts) {
     // Prose cannot be de-sourced automatically, so anything still unsupported is
     // named on the card. Publishing it is then a decision, not an accident.
     for (const problem of claimAudit.problems) residual.push(problem);
+    for (const problem of verdictFaults) residual.push(problem);
 
     // The opening has to survive the fold or the hook is never read.
     const firstLine = (safe.body || "").split("\n")[0];
@@ -545,8 +584,13 @@ async function finishChunk(ctx, posts) {
       ...safe,
       platform,
       intent: offerAllowed ? "offer" : safe.intent === "offer" ? "insight" : safe.intent || "insight",
+      // A post carrying an outside fact that did not survive checking is held
+      // back rather than published with a warning on it. Nothing that reaches
+      // the copy he pastes contains an unverified claim about the world.
+      withheld: claimAudit.problems.length > 0 || verdictFaults.length > 0,
       _check: {
         offer: offerAllowed,
+        withheldReason: [...claimAudit.problems, ...verdictFaults],
         // Outside facts a human should confirm before this goes out.
         claims: (safe.claims || []).filter((c) => c.basis === "briefing"),
         claimProblems: claimAudit.problems,

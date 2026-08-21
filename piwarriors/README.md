@@ -117,7 +117,36 @@ outright. Anything caught is rewritten. Anything still slightly off is flagged
 on the card rather than hidden. The scanner was calibrated against the brand's
 own vocabulary and book quotes, so real PI Warriors language passes untouched.
 
-**Outside facts have to be sourced.** This is the guardrail that matters most,
+**By default, the app states no outside facts at all.** This is the guardrail
+that matters most. A wrong statute number published under a real name, to
+providers and plaintiff attorneys who look things up, does more damage than any
+other mistake this app can make.
+
+Out of the box the run writes only from Dr. Spence's own practice. No statute, no
+regulation, no court case, no company or agency by name, no statistic, no
+effective date. That is not a limitation on the argument: the posts that made
+this brand work are the ones about cases he handled, and a post that leans on a
+citation is both weaker and riskier than one that does not. A post that reaches
+for an outside fact is rewritten, and if it keeps reaching, it is held back.
+
+**Held back means held back.** A post that does not pass is not shown with a
+warning label on it. It does not appear among the copy, it is not in any copy
+button, it is not in the download, and it is not counted as delivered. It is
+listed separately with the reason, so the decision is visible rather than
+silent. Every export path runs through one function to make that true, and a
+test asserts it for the whole run, one platform and one day.
+
+**If you do want to use current events**, Settings has a second mode where
+outside facts are allowed and every one of them is looked up again on its own
+before the post is finalised. That check is adversarial: it searches for the
+primary source and compares it against the claim word by word, and only a
+verdict of "supported" passes. A claim that is real but described more broadly
+than the source supports comes back "overstated" and fails, because that is the
+dangerous shape. It reads authoritative and it is wrong. Verified claims carry
+their source URL and the line of insurance they actually govern. This costs a
+search per claim, so runs are slower and dearer.
+
+**Sourcing is still checked underneath both modes.** This is the guardrail that matters most,
 because a wrong bill number in front of providers and attorneys costs more than
 any clumsy sentence.
 
@@ -258,10 +287,10 @@ first FAIL line is the one to fix.
 ## Development
 
 ```
-npm test        # 69 tests over the counting, limits, voice, sourcing, selling cadence, cost model and export logic
+npm test        # 76 tests over the counting, limits, voice, sourcing, verification, selling cadence, cost model and export logic
 ```
 
 The app is plain ES modules with no build step and no dependencies, matching the
 other apps in this repository. `js/limits.js` holds the platform rules and the
-character maths, `js/voice.js` the machine-writing and selling scanners, `js/claims.js` the sourcing gate, `js/brand.js` the
+character maths, `js/voice.js` the machine-writing and selling scanners, `js/claims.js` the sourcing gate, `js/verify.js` the independent fact check, `js/brand.js` the
 brand system prompt, and `js/generate.js` the run pipeline.

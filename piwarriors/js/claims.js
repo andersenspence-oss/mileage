@@ -115,10 +115,29 @@ const STOPWORDS = new Set([
  * @param {string} briefing  this week's research briefing
  * @returns {{problems: string[], flagged: Array, declared: Array}}
  */
-export function auditClaims(post, briefing) {
+export function auditClaims(post, briefing, { mode = "own-experience" } = {}) {
   const flagged = scanClaims(post && post.body);
   const declared = (post && post.claims) || [];
   const problems = [];
+
+  // The default mode does not argue about sourcing. Outside facts are simply
+  // not written, because the brand's authority comes from 23 years of cases and
+  // a post that leans on a statute is weaker and riskier than one that does not.
+  if (mode === "own-experience") {
+    for (const hit of flagged) {
+      problems.push(
+        `The post cites ${hit.label} ("${truncate(hit.text)}"). This run is set to write from Dr. Spence's own practice only. Cut it and make the same point from a case he handled. Do not replace it with a different outside fact.`
+      );
+    }
+    for (const claim of declared) {
+      if (claim.basis === "briefing") {
+        problems.push(
+          `"${truncate(claim.statement)}" is an outside fact, and this run is set to write from his own practice only. Remove it.`
+        );
+      }
+    }
+    return { problems, flagged, declared };
+  }
 
   // Anything declared as coming from the briefing has to be in the briefing.
   for (const claim of declared) {
@@ -146,6 +165,27 @@ export function auditClaims(post, briefing) {
   }
 
   return { problems, flagged, declared };
+}
+
+// Only a claim confirmed against a source is allowed through in verified mode.
+// Anything else is a fault, including a claim that is real but overstated,
+// which is how the CMS rule went wrong: the rule existed, the description of it
+// did not match what it says.
+export function verdictProblems(claims = []) {
+  const problems = [];
+  for (const claim of claims) {
+    const v = claim.verification;
+    if (!v) {
+      problems.push(`"${truncate(claim.statement)}" was never checked against a source. Remove it.`);
+      continue;
+    }
+    if (v.verdict === "supported") continue;
+    const correction = v.correction ? ` What the source actually says: ${v.correction}` : "";
+    problems.push(
+      `"${truncate(claim.statement)}" did not survive checking (${v.verdict}).${correction} Remove the claim and make the point from Dr. Spence's own cases instead.`
+    );
+  }
+  return problems;
 }
 
 function truncate(s, n = 60) {

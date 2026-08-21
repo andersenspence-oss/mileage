@@ -26,6 +26,10 @@ export const DEFAULT_SETTINGS = {
   xPremium: false,
   facebookLongForm: false,
   igHashtagsInComment: false,
+  // "own-experience" writes only from Dr. Spence's own cases and never states an
+  // outside fact. "verified-facts" allows them, but every one is looked up
+  // against a primary source and the post is held back if it does not hold up.
+  factMode: "own-experience",
   // Selling posts per platform per seven days. The posts are conversation
   // starters first; this is the occasional dusting on top.
   offersPerWeek: 1,

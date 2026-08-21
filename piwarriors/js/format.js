@@ -84,10 +84,29 @@ export function platformText(run, platformId, settings = {}) {
   return lines.join("\n").trim() + "\n";
 }
 
-export function postsForDay(run, date) {
+// Held-back posts are excluded everywhere by default. Every copy button, every
+// export and every count runs through here, so a post carrying an unverified
+// claim cannot reach the clipboard by any route.
+export function postsForDay(run, date, { includeWithheld = false } = {}) {
   const out = [];
   for (const chunk of run.chunks || []) {
-    if (chunk.day && chunk.day.date === date) out.push(...(chunk.posts || []));
+    if (chunk.day && chunk.day.date === date) {
+      for (const post of chunk.posts || []) {
+        if (post.withheld && !includeWithheld) continue;
+        out.push(post);
+      }
+    }
+  }
+  return out;
+}
+
+// The posts that did not pass, kept for review rather than for publishing.
+export function withheldPosts(run) {
+  const out = [];
+  for (const chunk of run.chunks || []) {
+    for (const post of chunk.posts || []) {
+      if (post.withheld) out.push({ post, day: chunk.day });
+    }
   }
   return out;
 }
@@ -102,7 +121,10 @@ export function groupByPlatform(posts) {
 }
 
 export function countPosts(run) {
-  return (run.chunks || []).reduce((n, c) => n + (c.posts || []).length, 0);
+  return (run.chunks || []).reduce(
+    (n, c) => n + (c.posts || []).filter((p) => !p.withheld).length,
+    0
+  );
 }
 
 export function runErrors(run) {

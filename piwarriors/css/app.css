@@ -214,3 +214,9 @@ details .body { margin-top: 10px; white-space: pre-wrap; font-size: 13px; line-h
 .claim { border-left: 2px solid var(--warn); padding: 4px 0 4px 9px; margin-bottom: 8px; }
 .claim-statement { font-size: 13px; line-height: 1.5; }
 .claim-support { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+
+/* Posts held back because an outside fact did not hold up. */
+.card.held { border: 1px solid var(--err); }
+.held-post { border-top: 1px dashed var(--line); padding-top: 10px; margin-top: 10px; }
+.held-body { font-size: 13px; line-height: 1.5; color: var(--muted); margin: 6px 0; white-space: pre-wrap; }
+.held-reason { font-size: 12px; color: var(--err); line-height: 1.5; margin-top: 4px; }

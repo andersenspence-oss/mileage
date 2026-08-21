@@ -7,7 +7,7 @@ import { runWeek, buildDays, allocateOffers } from "./generate.js";
 import { loadSettings, saveSettings, loadRuns, saveRun, deleteRun, getRun, historyFor, storageUsage } from "./store.js";
 import { el, clear, copyButton, toast, download, formatDate } from "./ui.js";
 import {
-  bodyText, tagText, fullText, mediaText,
+  bodyText, tagText, fullText, mediaText, withheldPosts,
   dayText, runText, platformText,
   postsForDay, groupByPlatform, countPosts, runErrors,
 } from "./format.js";
@@ -343,19 +343,26 @@ async function startRun() {
     stopTicking();
 
     const failed = runErrors(run);
-    const unsourced = [];
-  for (const chunk of run.chunks || []) {
-    for (const post of chunk.posts || []) {
-      if (((post._check || {}).claimProblems || []).length) unsourced.push(post);
+    const held = withheldPosts(run);
+  if (held.length) {
+    const card = el("div", { class: "card held" }, [
+      el("h3", { class: "err", text: `${held.length} post${held.length === 1 ? " was" : "s were"} held back` }),
+      el("p", { class: "small muted", style: "margin-bottom:10px", text: "Each of these states something about the outside world that did not hold up. They are not in the copy above, not in any of the copy buttons, and not in the download. They are shown here so you can see what was cut and why." }),
+    ]);
+    for (const { post, day } of held) {
+      const item = el("div", { class: "held-post" }, [
+        el("div", { class: "row" }, [
+          el("span", { class: "pill", text: PLATFORMS[post.platform] ? PLATFORMS[post.platform].name : post.platform }),
+          el("span", { class: "small muted", text: day ? formatDate(day.date) : "" }),
+        ]),
+        el("div", { class: "held-body", text: (post.body || "").slice(0, 220) + ((post.body || "").length > 220 ? "..." : "") }),
+      ]);
+      for (const reason of (post._check || {}).withheldReason || []) {
+        item.appendChild(el("div", { class: "held-reason", text: reason }));
+      }
+      card.appendChild(item);
     }
-  }
-  if (unsourced.length) {
-    view.appendChild(
-      el("div", { class: "card" }, [
-        el("h3", { class: "err", text: `${unsourced.length} post${unsourced.length === 1 ? " states" : "s state"} something that could not be sourced` }),
-        el("p", { class: "small muted", text: "These are marked Unsourced further down. The claim is not in this week's research, so either cut it or confirm it yourself before posting. Everything else in the run is unaffected." }),
-      ])
-    );
+    view.appendChild(card);
   }
 
   if (failed.length) {
@@ -417,19 +424,26 @@ function renderResults() {
   head.appendChild(actions);
   view.appendChild(head);
 
-  const unsourced = [];
-  for (const chunk of run.chunks || []) {
-    for (const post of chunk.posts || []) {
-      if (((post._check || {}).claimProblems || []).length) unsourced.push(post);
+  const held = withheldPosts(run);
+  if (held.length) {
+    const card = el("div", { class: "card held" }, [
+      el("h3", { class: "err", text: `${held.length} post${held.length === 1 ? " was" : "s were"} held back` }),
+      el("p", { class: "small muted", style: "margin-bottom:10px", text: "Each of these states something about the outside world that did not hold up. They are not in the copy above, not in any of the copy buttons, and not in the download. They are shown here so you can see what was cut and why." }),
+    ]);
+    for (const { post, day } of held) {
+      const item = el("div", { class: "held-post" }, [
+        el("div", { class: "row" }, [
+          el("span", { class: "pill", text: PLATFORMS[post.platform] ? PLATFORMS[post.platform].name : post.platform }),
+          el("span", { class: "small muted", text: day ? formatDate(day.date) : "" }),
+        ]),
+        el("div", { class: "held-body", text: (post.body || "").slice(0, 220) + ((post.body || "").length > 220 ? "..." : "") }),
+      ]);
+      for (const reason of (post._check || {}).withheldReason || []) {
+        item.appendChild(el("div", { class: "held-reason", text: reason }));
+      }
+      card.appendChild(item);
     }
-  }
-  if (unsourced.length) {
-    view.appendChild(
-      el("div", { class: "card" }, [
-        el("h3", { class: "err", text: `${unsourced.length} post${unsourced.length === 1 ? " states" : "s state"} something that could not be sourced` }),
-        el("p", { class: "small muted", text: "These are marked Unsourced further down. The claim is not in this week's research, so either cut it or confirm it yourself before posting. Everything else in the run is unaffected." }),
-      ])
-    );
+    view.appendChild(card);
   }
 
   if (failed.length) {
@@ -779,6 +793,32 @@ function renderSettings() {
   }
   modelCard.appendChild(quickRow);
   view.appendChild(modelCard);
+
+  const facts = el("div", { class: "card" }, [
+    el("h2", { text: "Facts about the outside world" }),
+    el("p", { class: "small muted", style: "margin-bottom:10px", text: "This decides whether a post may state anything checkable about the world: a statute, a regulation, a court case, a company, a statistic, a date." }),
+  ]);
+  const factSelect = el("select", {
+    onchange: (e) => {
+      state.settings.factMode = e.target.value;
+      persist();
+      render();
+    },
+  });
+  for (const [value, label] of [
+    ["own-experience", "His own practice only (recommended)"],
+    ["verified-facts", "Allow outside facts, each one checked"],
+  ]) {
+    factSelect.appendChild(el("option", { value, text: label, selected: (s.factMode || "own-experience") === value }));
+  }
+  facts.appendChild(factSelect);
+  facts.appendChild(
+    el("p", { class: "small muted", style: "margin-top:10px", text:
+      (s.factMode || "own-experience") === "own-experience"
+        ? "No post will name a statute, a regulation, a case, a company or a statistic. Everything is written from cases he handled, which is where his authority is anyway. A post that reaches for an outside fact is rewritten, and held back if it keeps reaching."
+        : "Every outside fact is looked up again on its own and compared against a primary source. A claim that is real but overstated fails, which is the case that reads authoritative and is wrong. Anything that does not come back confirmed is held back and never reaches the copy you paste. This adds a search per claim, so runs cost more and take longer." })
+  );
+  view.appendChild(facts);
 
   const rules = el("div", { class: "card" }, [el("h2", { text: "Platform rules" })]);
   rules.appendChild(
