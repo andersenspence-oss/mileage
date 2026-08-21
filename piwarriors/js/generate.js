@@ -14,6 +14,7 @@ import {
   bodyBudget,
 } from "./limits.js";
 import { scanPost, blockers, normalizePunctuation, sellingFindings, INTENTS } from "./voice.js";
+import { auditClaims, CLAIM_BASES } from "./claims.js";
 
 const MAX_REPAIR_ROUNDS = 3;
 const CONCURRENCY = 3;
@@ -40,7 +41,11 @@ ${notes ? `The user has also seen these conversations first-hand. Treat these as
 Write the result as a briefing for the copywriter. Use this shape:
 
 ## What changed this week
-Short bullets. Each bullet states the fact and, in parentheses, the source name and date. If you could not verify something, leave it out entirely rather than guessing.
+Short bullets. Every bullet must carry, in parentheses, the source name, the publication date, and which line of insurance it actually governs: health, auto and PIP, workers compensation, or all lines. That last part matters: most insurance regulation in the news governs health plans and does not bind an auto bodily injury adjuster, and content for PI providers that blurs the two is wrong in front of the exact people who will check.
+
+State each fact with the certainty the source gives it and no more. Alleged stays alleged. A lawsuit surviving a motion to dismiss is not a finding of fact. A proposed rule is not a rule. An effective date is only real if you found it; do not estimate one.
+
+If you cannot verify something, leave it out. A short briefing of things you actually confirmed is worth more than a long one with a guess in it, because everything here gets published under a real name.
 
 ## What providers are saying
 Bullets capturing the actual complaint or argument in the words being used, not a paraphrase into corporate language.
@@ -52,7 +57,10 @@ Same.
 Five to eight bullets. Each one is a specific, concrete idea for a post, tied to one of the Five Pillars (Documentation, Case Management, Legal, Billing, Marketing). Say which pillar.
 
 ## Sources
-Bare list of the URLs you actually used.
+Bare list of the URLs you actually used, each with the date you saw it.
+
+## What is not solid
+Anything you came across but could not confirm, with a word on why. This section keeps unverified material out of the copy while still recording that you saw it.
 
 Be concrete. Do not pad. If a section has nothing real behind it, write "Nothing solid found this week" under it rather than inventing material.`;
 
@@ -179,6 +187,19 @@ function postsSchema() {
             tags: { type: "array", items: { type: "string" } },
             pillar: { type: "string", enum: PILLARS.map((p) => p.id) },
             intent: { type: "string", enum: INTENTS },
+            claims: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  statement: { type: "string" },
+                  basis: { type: "string", enum: CLAIM_BASES },
+                  support: { type: "string" },
+                },
+                required: ["statement", "basis", "support"],
+                additionalProperties: false,
+              },
+            },
             slot: { type: "string" },
             media: {
               type: "object",
@@ -276,6 +297,7 @@ For each post:
 - "tags" are accounts worth @-mentioning, without the @ symbol. Only include an account when mentioning it genuinely makes sense and the account plausibly exists in this space. An empty list is the right answer most of the time. Never invent a specific person's handle.
 - "pillar" is the Five Pillars id this post actually serves.
 - "intent" is what the post is for. "conversation" asks something real and leaves room for an answer. "insight" reframes or teaches. "story" is a specific thing that happened. "offer" is the rationed selling post, and only when this batch was allowed one.
+- "claims" lists every assertion the post makes about the outside world: a statute, a regulation, a court case, a company or agency by name, a statistic, a date, a study. For each one give the "statement" as the post puts it, a "basis" of either "briefing" or "own-experience", and "support". For a briefing claim, "support" is the briefing line it came from, quoted closely enough to find. For own-experience, "support" is a short note on what it rests on. An empty list is the right answer for most posts, and a post built entirely on Dr. Spence's own cases is the safest post there is.
 - "slot" is a suggested posting time for this platform on this day, like "7:15am" or "12:30pm".
 - "media" describes what should run with the post:
   - "kind" is the format. ${p.name} takes: ${p.mediaKinds.join(", ")}.
@@ -334,7 +356,7 @@ function cleanPost(post) {
 // --------------------------------------------------------------- repair
 
 // Everything the post got wrong, in the plainest terms the model can act on.
-function problemReport(platform, post, settings, offerAllowed = false) {
+function problemReport(platform, post, settings, offerAllowed = false, briefing = "") {
   const check = validatePost(platform, post, settings);
   const tells = blockers(scanPost(post));
   const lines = [];
@@ -351,6 +373,12 @@ function problemReport(platform, post, settings, offerAllowed = false) {
             .join("; ")}. Cut the ask entirely and end the post on its idea or on a real question. Do not soften it, remove it.`
     );
   }
+  // Outside facts must be traceable. This is the check that keeps a wrong bill
+  // number from going out under his name.
+  for (const problem of auditClaims(post, briefing).problems) {
+    lines.push(problem);
+  }
+
   if (post.intent === "offer" && !offerAllowed) {
     lines.push(
       "This batch was not allowed a selling post. Rewrite this one as a conversation, insight or story piece with no call to action, and set intent accordingly."
@@ -381,7 +409,7 @@ function problemReport(platform, post, settings, offerAllowed = false) {
   return lines;
 }
 
-async function repairPosts({ apiKey, model, platform, broken, settings, offersAllowed = 0, signal }) {
+async function repairPosts({ apiKey, model, platform, broken, settings, offersAllowed = 0, briefing = "", signal }) {
   const p = PLATFORMS[platform];
   const listing = broken
     .map((item, i) => {
@@ -404,6 +432,8 @@ ${budgetBrief(platform, settings)}
 ${sellingBrief(offersAllowed, broken.length)}
 
 ${listing}
+
+If a problem is about an unsourced fact, the fix is to remove the fact, not to soften it or reword it. Make the same point from Dr. Spence's own cases. Do not swap one unsourced citation for another. Update the "claims" list to match whatever the rewritten post actually asserts.
 
 Keep each post's argument, its specifics and its voice. Fix only what is listed. Do not replace a concrete detail with a vague one to save characters. Return the full corrected post in "body", not a diff. Keep the same media suggestion intent, but you must still return every field.`;
 
@@ -439,14 +469,14 @@ function offerAllowance(posts, allowed) {
 }
 
 async function finishChunk(ctx, posts) {
-  const { apiKey, model, platform, settings, signal, onNote, offersAllowed = 0 } = ctx;
+  const { apiKey, model, platform, settings, signal, onNote, offersAllowed = 0, briefing = "" } = ctx;
   let current = posts;
 
   for (let round = 0; round < MAX_REPAIR_ROUNDS; round += 1) {
     const permitted = offerAllowance(current, offersAllowed);
     const broken = [];
     current.forEach((post, index) => {
-      const problems = problemReport(platform, post, settings, permitted.has(index));
+      const problems = problemReport(platform, post, settings, permitted.has(index), briefing);
       if (problems.length) broken.push({ index, post, problems });
     });
     if (!broken.length) break;
@@ -457,7 +487,7 @@ async function finishChunk(ctx, posts) {
 
     let fixed;
     try {
-      fixed = await repairPosts({ apiKey, model, platform, broken, settings, offersAllowed, signal });
+      fixed = await repairPosts({ apiKey, model, platform, broken, settings, offersAllowed, briefing, signal });
     } catch (err) {
       if (err && err.name === "AbortError") throw err;
       break; // Fall through to the deterministic trim below.
@@ -487,6 +517,7 @@ async function finishChunk(ctx, posts) {
 
     // Prose cannot be de-sold deterministically, so anything still selling is
     // named on the card rather than shipped quietly.
+    const claimAudit = auditClaims(safe, briefing);
     const stillSelling = sellingFindings(
       offerAllowed ? { ...safe, intent: "offer" } : { ...safe, intent: "conversation" }
     );
@@ -499,6 +530,9 @@ async function finishChunk(ctx, posts) {
     for (const f of stillSelling) {
       residual.push(offerAllowed ? `Hype to cut: ${f.label}.` : `This one sells, and it was not meant to: ${f.label}.`);
     }
+    // Prose cannot be de-sourced automatically, so anything still unsupported is
+    // named on the card. Publishing it is then a decision, not an accident.
+    for (const problem of claimAudit.problems) residual.push(problem);
 
     // The opening has to survive the fold or the hook is never read.
     const firstLine = (safe.body || "").split("\n")[0];
@@ -513,6 +547,9 @@ async function finishChunk(ctx, posts) {
       intent: offerAllowed ? "offer" : safe.intent === "offer" ? "insight" : safe.intent || "insight",
       _check: {
         offer: offerAllowed,
+        // Outside facts a human should confirm before this goes out.
+        claims: (safe.claims || []).filter((c) => c.basis === "briefing"),
+        claimProblems: claimAudit.problems,
         used: check.used,
         limit: check.limit,
         remaining: check.remaining,
@@ -665,7 +702,7 @@ export async function runWeek({
   let done = 0;
   const results = await pooled(chunks, CONCURRENCY, async (chunk) => {
     const model = models[chunk.platform] || models.plan;
-    const ctx = { apiKey, model, platform: chunk.platform, settings, signal, onNote, offersAllowed: chunk.offersAllowed };
+    const ctx = { apiKey, model, platform: chunk.platform, settings, signal, onNote, offersAllowed: chunk.offersAllowed, briefing: signals };
     let posts = [];
     try {
       posts = await generateChunk({

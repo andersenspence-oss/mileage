@@ -7,7 +7,7 @@
 
 // Shown in Settings so it is possible to tell, from the phone, whether the app
 // actually picked up the latest deploy.
-export const BUILD = "2026-08-19b";
+export const BUILD = "2026-08-19c";
 
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const API_VERSION = "2023-06-01";

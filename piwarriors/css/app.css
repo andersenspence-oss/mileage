@@ -207,3 +207,10 @@ details .body { margin-top: 10px; white-space: pre-wrap; font-size: 13px; line-h
 
 /* The rationed selling post is marked so it is obvious at a glance. */
 .pill.offer { background: var(--warn); color: #fff; }
+
+/* Outside facts a human has to confirm before publishing. */
+.pill.unsourced { background: var(--err); color: #fff; }
+.post-section.claims { background: rgba(180,83,9,.07); }
+.claim { border-left: 2px solid var(--warn); padding: 4px 0 4px 9px; margin-bottom: 8px; }
+.claim-statement { font-size: 13px; line-height: 1.5; }
+.claim-support { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.45; }

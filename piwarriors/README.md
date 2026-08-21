@@ -117,6 +117,39 @@ outright. Anything caught is rewritten. Anything still slightly off is flagged
 on the card rather than hidden. The scanner was calibrated against the brand's
 own vocabulary and book quotes, so real PI Warriors language passes untouched.
 
+**Outside facts have to be sourced.** This is the guardrail that matters most,
+because a wrong bill number in front of providers and attorneys costs more than
+any clumsy sentence.
+
+Two sources are allowed: the week's research briefing, and Dr. Spence's own
+practice. Nothing else. The generator is told not to reach into memory for a
+statute, a court case, a percentage or an effective date, and every outside fact
+a post uses must be declared with the briefing line behind it.
+
+That declaration is then checked rather than trusted. The app scans each post
+for the things that are checkable about the outside world: bill numbers,
+regulation codes, court cases, named companies and agencies, large figures,
+percentages, effective dates, attributions to a study or report. Anything found
+that is not declared, or declared as coming from the briefing but absent from
+it, sends the post back to be rewritten with the fact removed rather than
+softened. Clinical numbers are left alone, so "45 degrees of cervical rotation"
+and "six of eighteen visits" never trip it, and so are the brand's own figures.
+
+If a claim survives the rewrites, the post is badged **Unsourced**, the run
+warns about it at the top, and the specific problem is named on the card.
+Publishing it then takes a decision rather than an accident.
+
+Every post that states an outside fact carries a **Check before posting**
+section listing each claim and the briefing line behind it, so verifying a week
+takes a minute rather than a fact check afterwards.
+
+**One trap worth knowing about.** Most insurance regulation in the news governs
+health insurance. PI providers are paid by auto carriers through PIP and bodily
+injury, by workers compensation, and through liens, and health insurance rules
+generally do not bind an auto adjuster. The briefing now labels every fact with
+the line of insurance it actually governs, and the generator is told never to
+imply a health insurance rule reaches auto claims.
+
 **It does not repeat itself.** The last eight runs are kept on the phone, and
 every new run is given the previous themes and opening lines with instructions
 not to reuse them.
@@ -225,10 +258,10 @@ first FAIL line is the one to fix.
 ## Development
 
 ```
-npm test        # 60 tests over the counting, limits, voice, selling cadence, cost model and export logic
+npm test        # 69 tests over the counting, limits, voice, sourcing, selling cadence, cost model and export logic
 ```
 
 The app is plain ES modules with no build step and no dependencies, matching the
 other apps in this repository. `js/limits.js` holds the platform rules and the
-character maths, `js/voice.js` the machine-writing and selling scanners, `js/brand.js` the
+character maths, `js/voice.js` the machine-writing and selling scanners, `js/claims.js` the sourcing gate, `js/brand.js` the
 brand system prompt, and `js/generate.js` the run pipeline.

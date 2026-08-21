@@ -343,7 +343,22 @@ async function startRun() {
     stopTicking();
 
     const failed = runErrors(run);
-    if (failed.length) {
+    const unsourced = [];
+  for (const chunk of run.chunks || []) {
+    for (const post of chunk.posts || []) {
+      if (((post._check || {}).claimProblems || []).length) unsourced.push(post);
+    }
+  }
+  if (unsourced.length) {
+    view.appendChild(
+      el("div", { class: "card" }, [
+        el("h3", { class: "err", text: `${unsourced.length} post${unsourced.length === 1 ? " states" : "s state"} something that could not be sourced` }),
+        el("p", { class: "small muted", text: "These are marked Unsourced further down. The claim is not in this week's research, so either cut it or confirm it yourself before posting. Everything else in the run is unaffected." }),
+      ])
+    );
+  }
+
+  if (failed.length) {
       toast(`${countPosts(run)} posts written, ${failed.length} batch${failed.length === 1 ? "" : "es"} failed`, "err");
     } else {
       toast(`${countPosts(run)} posts ready`);
@@ -401,6 +416,21 @@ function renderResults() {
   ]);
   head.appendChild(actions);
   view.appendChild(head);
+
+  const unsourced = [];
+  for (const chunk of run.chunks || []) {
+    for (const post of chunk.posts || []) {
+      if (((post._check || {}).claimProblems || []).length) unsourced.push(post);
+    }
+  }
+  if (unsourced.length) {
+    view.appendChild(
+      el("div", { class: "card" }, [
+        el("h3", { class: "err", text: `${unsourced.length} post${unsourced.length === 1 ? " states" : "s state"} something that could not be sourced` }),
+        el("p", { class: "small muted", text: "These are marked Unsourced further down. The claim is not in this week's research, so either cut it or confirm it yourself before posting. Everything else in the run is unaffected." }),
+      ])
+    );
+  }
 
   if (failed.length) {
     view.appendChild(
@@ -470,6 +500,9 @@ function renderPost(post, platformId, index, day) {
       pillar ? el("span", { class: "pill pillar", text: pillar.name }) : null,
       intentLabel ? el("span", { class: check.offer ? "pill offer" : "pill pillar", text: intentLabel }) : null,
       el("span", { class: "spacer" }),
+      (check.claimProblems || []).length
+        ? el("span", { class: "pill unsourced", text: "Unsourced" })
+        : null,
       el("span", { class: counterClass, text: `${check.used}/${check.limit}` }),
     ])
   );
@@ -499,6 +532,25 @@ function renderPost(post, platformId, index, day) {
   if (media.altText) mediaSection.appendChild(el("p", { class: "media-line" }, [el("b", { text: "Alt: " }), media.altText]));
   mediaSection.appendChild(el("div", { class: "row", style: "margin-top:8px" }, [copyButton("Copy media brief", () => mediaText(post))]));
   card.appendChild(mediaSection);
+
+  // Outside facts get their own section rather than a footnote, because these
+  // are the lines that have to be true before this goes out under his name.
+  const toCheck = check.claims || [];
+  if (toCheck.length) {
+    const section = el("div", { class: "post-section claims" }, [
+      el("h4", { text: "Check before posting" }),
+      el("p", { class: "small muted", style: "margin-bottom:8px", text: "This post states something about the outside world. Confirm each line against the source before it goes out." }),
+    ]);
+    for (const claim of toCheck) {
+      section.appendChild(
+        el("div", { class: "claim" }, [
+          el("div", { class: "claim-statement", text: claim.statement }),
+          claim.support ? el("div", { class: "claim-support", text: `From the briefing: ${claim.support}` }) : null,
+        ])
+      );
+    }
+    card.appendChild(section);
+  }
 
   const flags = [];
   for (const note of check.trimmed || []) flags.push(note);

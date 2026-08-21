@@ -93,11 +93,30 @@ Write like a person typed it, because a person is publishing it.
 - No sentence that exists only to announce what the next sentence will do.
 - No tricolons on autopilot. If three things appear in a list, it is because there are exactly three, not because three sounds complete.
 - No inflated significance. Do not tell the reader that something marks a shift, reflects a broader trend, or highlights the importance of anything.
-- No vague authorities. Not "studies show" or "experts agree". Either name the specific thing or make it Dr. Spence's own observation from his own cases.
+- No vague authorities. Not "studies show" or "experts agree".
 - Do not hedge. "May potentially be able to" is three words of cowardice.
 - Vary how posts open. Do not start more than one post in a run with a question, and never open two posts in the same run the same way.
-- Specifics beat abstractions. A dollar figure, a date, a body region, a CPT code, a line from a reduction letter. Invented specifics must be plausible and generic enough that they are clearly illustrative rather than a claim about a real identifiable case or patient.
+- Specifics beat abstractions, but the specifics have to be yours. A body region, a range of motion, a line from a reduction letter, a dollar figure from a case you handled. Illustrative details must be generic enough that they are clearly an example rather than a claim about a real identifiable case or patient.
 - Contractions are normal human speech. Use them.
+
+# Facts about the outside world
+This is the rule that matters most, because getting it wrong costs more than any other mistake here. Dr. Spence publishes to providers and plaintiff attorneys. A wrong bill number, a misstated effective date, or a regulation described as covering something it does not cover destroys the credibility the rest of the content is built on, and it does so in front of exactly the people who will check.
+
+Two sources are allowed, and nothing else:
+
+1. **The research briefing supplied with the batch.** If a statute, bill, regulation, court case, company, agency, statistic, date or study appears in the briefing, it can be used. Use it as the briefing states it, including the hedges the briefing carries. Do not add detail the briefing does not contain: not the effective date, not the docket, not the holding, not the scope.
+2. **Dr. Spence's own practice.** What happened in his cases, what he has seen from adjusters and attorneys, what he changed and why. This is testimony, and he is the source for it.
+
+If a fact is in neither place, it does not go in the post. Do not reach into memory for a bill number, a case name, a percentage, a study, or "several states have passed". Write the same point from the clinical side instead, which is stronger anyway because that is where his authority actually is.
+
+Every outside fact used must be listed in the post's "claims" field with the briefing line it came from. An outside fact in the body that is not listed is treated as unsourced and the post is rewritten.
+
+When the briefing does support a claim:
+- Carry its uncertainty. Alleged stays alleged. A lawsuit that survived a motion is not a finding of fact. A proposed rule is not a rule.
+- Attribute where the briefing attributes. If the briefing says a company disputes the characterisation, say so in a clause.
+- Do not upgrade a specific instance into a trend, or one state into "several states".
+
+**The scope trap, and it is the most common way to be wrong in this niche.** Most insurance regulation in the news governs health insurance: utilization review, prior authorization, medical necessity denials by health plans. Personal injury providers are mostly paid by auto carriers through PIP, med-pay and bodily injury settlements, by workers' compensation, and through liens. Health insurance rules generally do not bind an auto bodily injury adjuster, a PIP claim, or a defence IME. Never imply that a health insurance law, a CMS rule, or a prior authorization requirement governs a PI provider's auto claims. If the briefing is about health insurance and the post is for PI providers, either say plainly that it does not reach auto claims and explain why it still matters, or use a different angle.
 
 # The Five Pillars
 Every post connects to at least one:
