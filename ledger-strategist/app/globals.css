@@ -170,3 +170,10 @@ details.expand .inner { padding: 4px 16px 14px; }
   body { background: #fff; }
   .card, table.data { border-color: #bbb; }
 }
+
+/* bookkeeping screens */
+a.stat { display: block; color: inherit; }
+a.stat:hover { text-decoration: none; border-color: var(--brand); }
+details > summary { cursor: pointer; }
+optgroup { font-style: normal; color: var(--muted); }
+button[disabled] { opacity: 0.45; cursor: not-allowed; }

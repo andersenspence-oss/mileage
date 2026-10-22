@@ -14,7 +14,7 @@ export default async function ClosePage({
   const [items, entities, reviewCount, flagCount] = await Promise.all([
     prisma.checklistItem.findMany({ where: { month }, orderBy: { sort: "asc" } }),
     prisma.entity.findMany({ orderBy: { sort: "asc" } }),
-    prisma.transaction.count({ where: { categoryStatus: { in: ["uncategorized", "suggested"] } } }),
+    prisma.transaction.count({ where: { categoryStatus: { in: ["uncategorized", "suggested"] }, entity: { status: "active" } } }),
     prisma.anomalyFlag.count({ where: { status: "open" } }),
   ]);
   const done = items.filter((i) => i.done).length;

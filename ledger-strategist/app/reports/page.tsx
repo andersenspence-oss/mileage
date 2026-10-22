@@ -57,9 +57,9 @@ export default async function ReportsPage({
           <option value="cf">Cash Flow</option>
         </select>
         <select name="entity" defaultValue={scope.slug}>
-          <option value="all">Combined — all entities</option>
+          <option value="all">Combined: all entities</option>
           {entities.map((e) => (
-            <option key={e.slug} value={e.slug}>{e.name}</option>
+            <option key={e.slug} value={e.slug}>{e.name}{e.status !== "active" ? " (sold)" : ""}</option>
           ))}
         </select>
         <input type="date" name="from" defaultValue={fmtInput(from)} />
@@ -111,7 +111,9 @@ export default async function ReportsPage({
             <tr><td style={{ paddingLeft: 28 }}>Retained earnings (cumulative net income)</td><td className="num">{usd(bs.retainedEarnings, { cents: true })}</td></tr>
             <tr className="total"><td>Total equity</td><td className="num">{usd(bs.totalEquity, { cents: true })}</td></tr>
             <tr className="total">
-              <td>Liabilities + equity {bs.balances ? "✓ balances" : "⚠ does not balance"}</td>
+              <td>Liabilities + equity {bs.balances ? "✓ balances" : "⚠ does not balance"}
+                {bs.carriedFromQuickBooks !== 0 && <div className="xsmall mut">QuickBooks 2016 is the official balance sheet. This view knows your bank and card balances exactly; opening loan, equity, and asset balances live in QuickBooks and are shown above as one line.</div>}
+              </td>
               <td className="num">{usd(bs.totalLiabilities + bs.totalEquity, { cents: true })}</td>
             </tr>
           </tbody>

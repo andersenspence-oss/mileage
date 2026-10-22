@@ -1,14 +1,15 @@
 # Ledger + Strategist
 
-**Your books and your tax strategy, in one place, across all eight entities.**
+**Bookkeeping for every entity you own, built around QuickBooks 2016 Desktop, plus a tax strategy engine.**
 
 This app does two jobs:
 
-1. **Keeps your books clean.** It connects to QuickBooks Online, keeps a fast
-   local copy of every entity's numbers, suggests categories for messy
-   transactions (you approve every one), flags duplicates and odd charges, and
-   produces Profit & Loss, Balance Sheet, and Cash Flow reports — per entity
-   and for the whole group.
+1. **Does the bookkeeping work.** You download each bank and card account as a
+   CSV file and drop it in. The app skips anything already imported, matches
+   checks and ADP payroll you entered by hand, suggests a category for
+   everything else (you approve each one, and it learns), reconciles each
+   account to its statement, and then hands QuickBooks 2016 one finished file
+   to import. **QuickBooks stays the official books; nothing gets typed twice.**
 2. **Finds tax-saving moves.** You fill out a one-time questionnaire about your
    situation. The app runs a library of well-known, legally sound tax
    strategies against your real numbers and gives you a ranked list: estimated
@@ -60,8 +61,8 @@ npm run setup
 ```
 
 This installs everything, creates your local database (a single file in the
-`data` folder — your numbers never leave your computer), and loads realistic
-**demo books for all eight entities** so you can explore every screen
+`prisma/data` folder; your numbers never leave your computer), and loads realistic
+**demo books** so you can explore every screen
 immediately.
 
 ### 5. Start the app (this is the everyday command)
@@ -76,36 +77,89 @@ To stop the app, go back to the terminal and press `Ctrl` + `C`.
 
 ---
 
-## Connecting QuickBooks Online (when you're ready)
+## Going live with QuickBooks 2016 (once per entity, about 20 minutes)
 
-1. Go to <https://developer.intuit.com>, sign in with your QuickBooks account,
-   and create a free app (choose the **QuickBooks Online Accounting** scope).
-2. In your Intuit app's settings, add this exact Redirect URI:
-   `http://localhost:4545/api/qbo/callback`
-3. Copy the **Client ID** and **Client Secret** into your `.env` file.
-4. Keep `QBO_ENVIRONMENT="sandbox"` at first — sandbox is Intuit's safe test
-   mode with fake data. Switch it to `"production"` only when you're ready to
-   pull your real books.
-5. Restart the app, go to **Entities & QuickBooks**, and click
-   **Connect QuickBooks** next to an entity. Approve the connection in the
-   window that opens, then click **Sync now**.
+1. **Clear the demo data**: Entities page, bottom, *Clear demo data* (all entities).
+2. **Load each company's lists**: in QuickBooks 2016, open that entity's company
+   file, then **File > Utilities > Export > Lists to IIF Files**. Check *Chart of
+   Accounts, Customer List, Vendor List, Employee List, Other Names List*, save
+   the file. In the app: **QuickBooks 2016** page, pick the entity, *Load lists*.
+   Do this again any time you add accounts in QuickBooks.
+3. **Set each bank and card account's starting point**: same page, step 2. Pick
+   the last statement date you already reconciled in QuickBooks and enter that
+   statement's ending balance (for a card, the amount owed). Anything on or
+   before that date is treated as already in QuickBooks: it's used for reports
+   and tax analysis but never sent to QuickBooks again. Tip: import a year of
+   history right away so the reports and tax strategy have real numbers.
+4. The first time you enter an ADP payroll, pick its accounts; the app fills
+   them in after that.
 
-The app only *reads* from QuickBooks. It never writes anything back, so it can
-never mess up your books.
+## The routine
 
-## Where to paste keys — quick reference
+**Weekly (about 15 minutes)**
+
+1. **Import Bank & Card**: download each account as CSV (overlap is fine) and upload it.
+2. **Review Queue**: *Approve all 90%+ sure*, then decide the rest. Picking a bank
+   or card account as the "category" records a transfer (like paying the credit
+   card); the matching line on the other account is combined automatically.
+3. **Payroll (ADP)**: enter each payroll from ADP's payroll summary. It becomes
+   one bank entry per ADP debit (net pay, tax deposit, fee), so the bank download
+   matches it instead of adding it twice.
+
+**Monthly, when statements arrive**
+
+1. **Reconcile** each account: enter the statement date and ending balance, check
+   off what's on the statement, finish at a $0.00 difference. Reconciled items lock.
+2. **QuickBooks 2016 > Send to QuickBooks**: create the file and download it. In
+   QuickBooks: **back up first** (File > Back Up Company), then **File > Utilities >
+   Import > IIF Files**. Reconciled items arrive already marked cleared.
+3. **Month-End & CPA Package**, then **Download backup** (Entities page).
+
+## Adding or selling an entity
+
+- **Bought or started one**: Entities page, *Add an entity*, then set it up on the
+  QuickBooks 2016 page like the others.
+- **Sold one**: Entities page, *Mark as sold* with the sale date. Its history stays
+  in reports and tax analysis for the years you owned it; it leaves the daily
+  screens. *Make active again* undoes it. Only an entity with no real
+  transactions can be deleted permanently.
+
+## What protects the books
+
+- Nothing is sent to QuickBooks twice; each file is recorded, and a file that was
+  never imported can be undone.
+- Nothing unbalanced is ever written to a QuickBooks file.
+- Accounts that aren't in that company's QuickBooks chart are blocked from export,
+  instead of quietly creating new accounts in QuickBooks.
+- Reconciled transactions can't have their date or amount changed.
+- Anything changed after it went to QuickBooks is listed on the QuickBooks 2016
+  page so the same fix gets made there.
+- `npm run seed` refuses to run once real bookkeeping exists.
+- **Backups**: everything lives in one file on this computer
+  (`prisma/data/ledger.db`). Use *Download backup* on the Entities page weekly.
+  To restore: stop the app, put the backup in `prisma/data/` named `ledger.db`,
+  start the app.
+
+## Where to paste keys: quick reference
 
 | Key | Where to get it | Where to paste it |
 |---|---|---|
-| Anthropic API key | console.anthropic.com → API Keys | `.env` → `ANTHROPIC_API_KEY=` |
-| QuickBooks Client ID | developer.intuit.com → your app | `.env` → `QBO_CLIENT_ID=` |
-| QuickBooks Client Secret | developer.intuit.com → your app | `.env` → `QBO_CLIENT_SECRET=` |
+| Anthropic API key (optional; much smarter category suggestions) | console.anthropic.com > API Keys | `.env` > `ANTHROPIC_API_KEY=` |
+
+The QuickBooks Online keys in `.env` belong to an older sync feature and aren't
+needed with QuickBooks 2016.
 
 ## A tour of the screens
 
+- **Bookkeeping Home**: what needs doing for every active entity, account by account.
+- **Import Bank & Card**: upload CSV downloads; preview, fix columns once, import.
+- **Registers**: each bank and card account with a running balance; add checks by hand.
+- **Payroll (ADP)**: enter a payroll; balanced entries through Payroll Liabilities.
+- **Reconcile**: statement-by-statement, with a printable report.
+- **QuickBooks 2016**: load lists, set starting points, create and download IIF files.
 - **Dashboard** — revenue, expenses, net, and cash for every entity and the
   combined group, with plain-language callouts about what changed.
-- **Entities & QuickBooks** — the eight entities, connection status, sync.
+- **Entities**: add, edit, mark sold, back up.
 - **Review Queue** — transactions the AI wasn't sure about, with its suggested
   category and confidence. You approve, change, or reject. It learns from you.
 - **Anomaly Flags** — likely duplicates, unusual charges, possible
@@ -141,8 +195,13 @@ never mess up your books.
   and reopen the terminal after installing.
 - **The page won't load** — make sure the terminal window running `npm start`
   is still open; the app stops when you close it.
-- **Start fresh** — delete the `data` folder and run `npm run setup` again.
-  (This resets to demo data; QuickBooks connections must be redone.)
+- **Start fresh (demo only)**: delete the `prisma/data` folder and run `npm run setup`
+  again. Never do this once real bookkeeping is in the app; restore a backup instead.
+- **A bank's CSV imports oddly**: on the preview screen, fix the date/amount
+  columns or check "Flip + and −", then *Update preview*. The app remembers it.
+- **QuickBooks says an account doesn't exist** during IIF import: the account was
+  renamed in QuickBooks. Reload the lists on the QuickBooks 2016 page and create
+  the file again.
 
 ---
 

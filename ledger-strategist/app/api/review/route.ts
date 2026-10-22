@@ -1,61 +1,36 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
+import { act, str, withParams } from "@/lib/http";
+import { approveSuggestion, approveConfident, applyCategory, BookError } from "@/lib/bookkeeping";
 
-// Handles approve / edit / reject from the review queue. This is the human-in-
-// the-loop gate: only these actions ever set a category, and approvals teach
-// the vendor-rule learner.
+// The human-in-the-loop gate: only these actions ever set a category, and
+// every approval or correction teaches the rule learner for that entity.
 export async function POST(req: NextRequest) {
-  const form = await req.formData();
-  const action = String(form.get("action") ?? "");
-  const txnId = String(form.get("txnId") ?? "");
-
-  const txn = await prisma.transaction.findUnique({
-    where: { id: txnId },
-    include: { suggestions: { where: { status: "pending" }, orderBy: { createdAt: "desc" } }, entity: true },
+  return act(req, "/review", async (form) => {
+    const action = str(form, "action");
+    const back = str(form, "returnTo") || "/review";
+    if (action === "approve_confident") {
+      const slug = str(form, "entity");
+      const e = slug ? await prisma.entity.findUnique({ where: { slug } }) : null;
+      const n = await approveConfident(0.9, e ? [e.id] : undefined);
+      return withParams(back, { msg: `Approved ${n} suggestions that were 90% sure or better.` });
+    }
+    const txnId = str(form, "txnId");
+    if (action === "approve") {
+      const r = await approveSuggestion(txnId);
+      return withParams(back, { msg: r.merged ? "Approved, and matched with the other side of the transfer." : undefined, error: r.warning ?? undefined });
+    }
+    if (action === "edit") {
+      const accountId = str(form, "accountId");
+      if (!accountId) throw new BookError("Pick a category first.");
+      const r = await applyCategory(txnId, accountId, { suggestion: "edited" });
+      return withParams(back, { msg: r.merged ? "Saved as a transfer and matched with the other side." : undefined, error: r.warning ?? undefined });
+    }
+    if (action === "reject") {
+      await prisma.categorySuggestion.updateMany({ where: { transactionId: txnId, status: "pending" }, data: { status: "rejected" } });
+      await prisma.transaction.update({ where: { id: txnId }, data: { categoryStatus: "uncategorized" } });
+      return back;
+    }
+    throw new BookError("Unknown action.");
   });
-  if (!txn) return NextResponse.redirect(new URL("/review", req.url), 303);
-  const suggestion = txn.suggestions[0];
-
-  async function accountIdFor(name: string): Promise<string> {
-    const existing = await prisma.account.findFirst({ where: { entityId: txn!.entityId, name } });
-    if (existing) return existing.id;
-    const created = await prisma.account.create({
-      data: { entityId: txn!.entityId, name, type: txn!.flow === "in" ? "income" : "expense" },
-    });
-    return created.id;
-  }
-
-  async function learn(accountName: string) {
-    const vendor = (txn!.vendor ?? "").trim();
-    if (!vendor) return;
-    const existing = await prisma.vendorRule.findFirst({ where: { vendorPattern: vendor, entitySlug: null } });
-    if (existing) {
-      await prisma.vendorRule.update({
-        where: { id: existing.id },
-        data: { accountName, hits: existing.accountName === accountName ? existing.hits + 1 : 1 },
-      });
-    } else {
-      await prisma.vendorRule.create({ data: { vendorPattern: vendor, accountName, entitySlug: null } });
-    }
-  }
-
-  if (action === "approve" && suggestion) {
-    const accountId = await accountIdFor(suggestion.suggestedAccountName);
-    await prisma.transaction.update({ where: { id: txn.id }, data: { accountId, categoryStatus: "approved" } });
-    await prisma.categorySuggestion.update({ where: { id: suggestion.id }, data: { status: "approved" } });
-    await learn(suggestion.suggestedAccountName);
-  } else if (action === "edit") {
-    const accountName = String(form.get("accountName") ?? "").trim();
-    if (accountName) {
-      const accountId = await accountIdFor(accountName);
-      await prisma.transaction.update({ where: { id: txn.id }, data: { accountId, categoryStatus: "approved" } });
-      if (suggestion) await prisma.categorySuggestion.update({ where: { id: suggestion.id }, data: { status: "edited" } });
-      await learn(accountName);
-    }
-  } else if (action === "reject") {
-    if (suggestion) await prisma.categorySuggestion.update({ where: { id: suggestion.id }, data: { status: "rejected" } });
-    await prisma.transaction.update({ where: { id: txn.id }, data: { categoryStatus: "uncategorized" } });
-  }
-
-  return NextResponse.redirect(new URL("/review", req.url), 303);
 }

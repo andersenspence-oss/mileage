@@ -443,6 +443,11 @@ export async function commitImport(batchId: string, mapping: CsvMapping) {
   const cands = await matchCandidates(reg.id);
   const used = new Set<string>();
   const rules = await prisma.vendorRule.findMany({ where: { OR: [{ entitySlug: reg.entity.slug }, { entitySlug: null }], payeeName: { not: null } } });
+  // QuickBooks names, longest first, so "Red Rock Properties" wins over "Red Rock"
+  const qbNames = (await prisma.qbName.findMany({ where: { entityId: reg.entityId } }))
+    .map((n) => ({ name: n.name, key: normName(n.name) }))
+    .filter((n) => n.key.length >= 3)
+    .sort((a, b) => b.key.length - a.key.length);
   let added = 0, matched = 0, duplicates = 0;
 
   for (let i = 0; i < rows.length; i++) {
@@ -460,12 +465,17 @@ export async function commitImport(batchId: string, mapping: CsvMapping) {
       matched++;
       continue;
     }
-    const vendor = cleanVendor(r.description);
-    const payeeRule = rules.find((x) => vendor.toLowerCase().includes(x.vendorPattern.toLowerCase()));
+    // a bare "CHECK 1043" line says nothing about who was paid; leave the vendor blank
+    // so no category rule is learned from it (the matching or the bookkeeper fills it in)
+    const bareCheck = /^(check|chk|cheque)\s*#?\s*\d+$/i.test(r.description.trim());
+    const vendor = bareCheck ? null : cleanVendor(r.description);
+    const payeeRule = vendor ? rules.find((x) => vendor.toLowerCase().includes(x.vendorPattern.toLowerCase())) : undefined;
+    const descKey = ` ${normName(r.description)} `;
+    const knownName = qbNames.find((n) => descKey.includes(` ${n.key} `))?.name;
     await prisma.transaction.create({
       data: {
         entityId: reg.entityId, registerAccountId: reg.id, date: r.date, amount: Math.abs(r.amount), flow: r.amount > 0 ? "in" : "out",
-        vendor, description: r.description, payee: payeeRule?.payeeName ?? null, checkNum: r.checkNum, memo: r.memo,
+        vendor, description: r.description, payee: payeeRule?.payeeName ?? knownName ?? null, checkNum: r.checkNum, memo: r.memo,
         origin: "import", source: "bank", categoryStatus: "uncategorized",
         qbStatus: reg.startDate && r.date <= reg.startDate ? "in_qb" : "pending",
         clears: { create: { accountId: reg.id, importFingerprint: fps[i], bankDescription: r.description } },
@@ -477,6 +487,11 @@ export async function commitImport(batchId: string, mapping: CsvMapping) {
   await prisma.account.update({ where: { id: reg.id }, data: { csvProfileJson: JSON.stringify(mapping) } });
   if (added > 0) await generateSuggestions({ entityIds: [reg.entityId] });
   return { added, matched, duplicates };
+}
+
+/** "RED ROCK PROPERTIES, LLC" -> "red rock properties llc" for name matching. */
+function normName(s: string) {
+  return s.toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 // ---- registers --------------------------------------------------------------------------------
@@ -719,7 +734,8 @@ export async function exportPreview(entityId: string, through: Date) {
       accountId: t.accountId, transferAccountId: t.transferAccountId,
       splits: t.splits.sort((a, b) => a.sort - b.sort).map((s) => ({ accountId: s.accountId, amount: s.amount, memo: s.memo })),
       payee, checkNum: t.checkNum,
-      memo: [t.memo, !payee && (t.payee || t.vendor) ? (t.payee || t.vendor) : null, t.description && t.description !== t.memo ? t.description : null].filter(Boolean).join(" | ") || null,
+      // memo: what she typed, else the bank's own text (which already names the payee)
+      memo: [t.memo, t.description && t.description !== t.memo ? t.description : !t.description && !payee ? t.payee || t.vendor : null].filter(Boolean).join(" | ") || null,
       clearedOn: new Set(t.clears.filter((c) => c.reconciliation?.status === "finished").map((c) => c.accountId)),
     }, amap);
     if (!r.ok) { problems.push({ txnId: t.id, date: t.date, label, amount: t.amount, problem: r.problem }); continue; }

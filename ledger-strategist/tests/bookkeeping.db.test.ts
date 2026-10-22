@@ -25,6 +25,7 @@ const QB_LISTS = [
   ["!VEND", "NAME", "1099", "HIDDEN"].join(T),
   ["VEND", "ADP", "N", "N"].join(T),
   ["VEND", "Maverik", "N", "N"].join(T),
+  ["VEND", "Red Rock Properties", "Y", "N"].join(T),
 ].join("\r\n");
 
 const BANK_CSV_1 =
@@ -60,7 +61,7 @@ describe("a month of real bookkeeping", () => {
     entityId = e.id;
     const r = await bk.importQbLists(entityId, QB_LISTS);
     expect(r.created).toBe(11);
-    expect(r.names).toBe(2);
+    expect(r.names).toBe(3);
     bankId = await acct("Zions Checking");
     cardId = await acct("Chase Visa");
     // go live Sept 30: statement balances that day
@@ -98,6 +99,9 @@ describe("a month of real bookkeeping", () => {
     expect(pv.counts).toEqual({ new: 3, duplicate: 0, match: 3, beforeGoLive: 0 });
     const r = await bk.commitImport(b.id, pv.mapping);
     expect(r).toEqual({ added: 3, matched: 3, duplicates: 0 });
+    // a payee QuickBooks already knows is filled in from the bank text
+    const rent = await prisma.transaction.findFirstOrThrow({ where: { entityId, amount: 4200 } });
+    expect(rent.payee).toBe("Red Rock Properties");
   });
 
   it("downloading the same month again adds nothing", async () => {

@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 const TEMPLATE = [
-  "Sync / import all entity books",
+  "Import every bank and card download through month-end",
+  "Enter every ADP payroll for the month",
   "Clear the review queue (categorize everything)",
   "Resolve or dismiss all anomaly flags",
-  "Reconcile bank balances against statements",
+  "Reconcile every bank and card account to its statement",
+  "Send the month to QuickBooks 2016 (back up first, then import the IIF file)",
+  "Fix in QuickBooks anything marked 'changed after sending'",
   "Review P&L vs. last month for each entity",
-  "Record any intercompany transfers correctly",
+  "Record any transfers between entities as owner contributions/draws or loans (ask the CPA which)",
   "Export the CPA package",
+  "Download a backup of this app (Entities page) and store it somewhere safe",
 ];
 
 export async function POST(req: NextRequest) {

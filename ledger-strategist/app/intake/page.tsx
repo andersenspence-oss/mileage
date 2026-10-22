@@ -111,7 +111,7 @@ export default async function IntakePage({
         </div>
 
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>The eight entities</h3>
+          <h3 style={{ marginTop: 0 }}>Your entities</h3>
           <p className="small mut">
             This map is what lets the analyzer reason across the whole group. &quot;Tax treatment&quot; matters
             enormously — mark it <i>unknown</i> if unsure and your CPA can confirm each one.
