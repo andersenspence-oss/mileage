@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { LEDGER_TXN_SELECT, LEDGER_ACCOUNT_SELECT, toTxnLite } from "@/lib/reportData";
 import { usd, monthKey, monthLabel } from "@/lib/format";
 import {
   profitAndLoss, balanceSheet, monthlySeries, spendingCallouts,
@@ -9,10 +10,11 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
-  const entities = await prisma.entity.findMany({ orderBy: { sort: "asc" } });
-  const [txnsAll, accountsAll, reviewCount, flagCount] = await Promise.all([
-    prisma.transaction.findMany({ select: { entityId: true, date: true, amount: true, flow: true, accountId: true } }),
-    prisma.account.findMany({ select: { id: true, entityId: true, name: true, type: true, openingBalance: true } }),
+  const entities = await prisma.entity.findMany({ where: { status: "active" }, orderBy: { sort: "asc" } });
+  const ids = entities.map((e) => e.id);
+  const [txnRows, accountsAll, reviewCount, flagCount] = await Promise.all([
+    prisma.transaction.findMany({ where: { entityId: { in: ids } }, select: LEDGER_TXN_SELECT }),
+    prisma.account.findMany({ where: { entityId: { in: ids } }, select: LEDGER_ACCOUNT_SELECT }),
     prisma.transaction.count({ where: { categoryStatus: { in: ["uncategorized", "suggested"] } } }),
     prisma.anomalyFlag.count({ where: { status: "open" } }),
   ]);
@@ -28,6 +30,7 @@ export default async function Dashboard() {
   const byEntityTxns = new Map<string, TxnLite[]>();
   const byEntityAccounts = new Map<string, AccountLite[]>();
   for (const e of entities) { byEntityTxns.set(e.id, []); byEntityAccounts.set(e.id, []); }
+  const txnsAll = txnRows.map((t) => ({ ...toTxnLite(t), entityId: t.entityId }));
   for (const t of txnsAll) byEntityTxns.get(t.entityId)?.push(t);
   for (const a of accountsAll) byEntityAccounts.get(a.entityId)?.push(a);
 
@@ -52,7 +55,7 @@ export default async function Dashboard() {
   // last 6 full-ish months, combined trend
   const trendKeys: string[] = [];
   for (let i = 5; i >= 0; i--) trendKeys.push(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1)));
-  const trend = monthlySeries(txnsAll, trendKeys);
+  const trend = monthlySeries(txnsAll, trendKeys, accountsAll);
   const maxNet = Math.max(...trend.map((p) => Math.abs(p.net)), 1);
 
   // plain-language callouts across entities (compare last full month vs the one before)
@@ -71,7 +74,7 @@ export default async function Dashboard() {
   return (
     <div>
       <h1>Portfolio Dashboard</h1>
-      <p className="subtitle">All eight entities at a glance — {now.toLocaleDateString("en-US", { month: "long", year: "numeric" })} month-to-date.</p>
+      <p className="subtitle">All active entities at a glance — {now.toLocaleDateString("en-US", { month: "long", year: "numeric" })} month-to-date.</p>
 
       <div className="statgrid">
         <div className="stat"><div className="label">Group revenue (MTD)</div><div className="value">{usd(combined.income)}</div></div>

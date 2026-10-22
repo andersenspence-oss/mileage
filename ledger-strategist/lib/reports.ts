@@ -1,17 +1,26 @@
 // The report engine. Pure functions: (transactions, accounts, dates) -> report.
 // No database access here, so the money math is directly unit-testable.
 //
-// Conventions:
-//  - Transaction.amount is always positive; `flow` is "in" or "out".
-//  - Cash basis: every transaction is assumed settled to cash, so cumulative
-//    (in - out) is the change in cash, and the balance sheet balances by
-//    construction when opening balances balance.
+// Transactions are ledger-shaped (see lib/ledger.ts): each moves money through
+// a register (bank or credit card) and lands in a category, several split
+// categories, or another balance-sheet account (a transfer). Older callers
+// that pass only {date, amount, flow, accountId} still work: such rows are
+// treated as running through the entity's first bank account.
+import {
+  plLines, accountBalances, categoryLines, countsForRegister,
+  type LedgerTxn, type LedgerAccount, type LedgerSplit,
+} from "./ledger";
 
 export type TxnLite = {
   date: Date;
   amount: number;
-  flow: string; // "in" | "out"
+  flow: string; // "in" | "out" relative to the register
   accountId: string | null;
+  id?: string;
+  registerAccountId?: string | null;
+  kind?: string;
+  transferAccountId?: string | null;
+  splits?: LedgerSplit[];
 };
 
 export type AccountLite = {
@@ -19,11 +28,33 @@ export type AccountLite = {
   name: string;
   type: string; // income | expense | cogs | bank | fixed_asset | other_asset | credit_card | liability | equity
   openingBalance: number;
+  startDate?: Date | null;
 };
 
 export type ReportLine = { name: string; amount: number };
 
-const r2 = (n: number) => Math.round(n * 100) / 100;
+/** Normalize report input into full ledger transactions. */
+export function asLedger(txns: TxnLite[], accounts: AccountLite[]): LedgerTxn[] {
+  const firstBank = accounts.find((a) => a.type === "bank")?.id ?? null;
+  return txns.map((t, i) => ({
+    id: t.id ?? `t${i}`,
+    date: t.date,
+    amount: t.amount,
+    flow: t.flow,
+    registerAccountId: t.registerAccountId ?? firstBank,
+    kind: t.kind ?? "standard",
+    accountId: t.accountId,
+    transferAccountId: t.transferAccountId ?? null,
+    splits: t.splits,
+  }));
+}
+
+/** P&L-shaped lines (income in, expenses out; transfers and balance-sheet categories removed). */
+function pl(txns: TxnLite[], accounts: AccountLite[]): TxnLite[] {
+  return plLines(asLedger(txns, accounts), accounts as LedgerAccount[]);
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100 + 0;
 const inRange = (t: TxnLite, from: Date, to: Date) => t.date >= from && t.date <= to;
 
 function sumByAccount(
@@ -66,7 +97,7 @@ export function profitAndLoss(
   from: Date,
   to: Date
 ): ProfitAndLoss {
-  const inScope = txns.filter((t) => inRange(t, from, to));
+  const inScope = pl(txns, accounts).filter((t) => inRange(t, from, to));
   const byId = new Map(accounts.map((a) => [a.id, a]));
 
   const incomeLines = sumByAccount(inScope, accounts, ["income"], "in");
@@ -108,6 +139,7 @@ export type BalanceSheet = {
   totalLiabilities: number;
   totalEquity: number;
   balances: boolean;
+  carriedFromQuickBooks: number; // 0 when the app's own numbers balance
 };
 
 export function balanceSheet(
@@ -115,43 +147,40 @@ export function balanceSheet(
   accounts: AccountLite[],
   asOf: Date
 ): BalanceSheet {
-  const upTo = txns.filter((t) => t.date <= asOf);
-  const netCash = r2(upTo.reduce((s, t) => s + (t.flow === "in" ? t.amount : -t.amount), 0));
+  const ledger = asLedger(txns, accounts);
+  const bal = accountBalances(ledger, accounts as LedgerAccount[], asOf);
+  const line = (a: AccountLite) => ({ name: a.name, amount: bal.get(a.id) ?? 0 });
 
-  const banks = accounts.filter((a) => a.type === "bank");
-  const totalOpeningCash = banks.reduce((s, a) => s + a.openingBalance, 0);
-  // net cash movement is attributed to bank accounts proportionally to opening
-  // balance (single-bank entities — the common case — are exact)
-  const cashLines: ReportLine[] = banks.map((a) => ({
-    name: a.name,
-    amount: r2(a.openingBalance + (totalOpeningCash > 0 ? netCash * (a.openingBalance / totalOpeningCash) : netCash / Math.max(banks.length, 1))),
-  }));
+  const cashLines = accounts.filter((a) => a.type === "bank").map(line);
+  const assetLines = accounts.filter((a) => a.type === "fixed_asset" || a.type === "other_asset").map(line);
+  const liabilityLines = accounts.filter((a) => a.type === "liability" || a.type === "credit_card").map(line);
+  const equityLines = accounts.filter((a) => a.type === "equity").map(line);
 
-  const assetLines = accounts
-    .filter((a) => a.type === "fixed_asset" || a.type === "other_asset")
-    .map((a) => ({ name: a.name, amount: r2(a.openingBalance) }));
-  const liabilityLines = accounts
-    .filter((a) => a.type === "liability" || a.type === "credit_card")
-    .map((a) => ({ name: a.name, amount: r2(a.openingBalance) }));
-  const equityLines = accounts
-    .filter((a) => a.type === "equity")
-    .map((a) => ({ name: a.name, amount: r2(a.openingBalance) }));
+  // Retained earnings = cumulative profit (uncategorized money included, so
+  // nothing silently drops out of the balance).
+  const lines = pl(txns, accounts).filter((t) => t.date <= asOf);
+  const retainedEarnings = r2(lines.reduce((s, t) => s + (t.flow === "in" ? t.amount : -t.amount), 0));
 
-  // On a cash basis with all flows hitting cash, cumulative net income equals
-  // cumulative net cash movement.
-  const retainedEarnings = netCash;
-
-  const totalAssets = r2(
-    cashLines.reduce((s, l) => s + l.amount, 0) + assetLines.reduce((s, l) => s + l.amount, 0)
-  );
+  const totalAssets = r2(cashLines.reduce((s, l) => s + l.amount, 0) + assetLines.reduce((s, l) => s + l.amount, 0));
   const totalLiabilities = r2(liabilityLines.reduce((s, l) => s + l.amount, 0));
-  const totalEquity = r2(equityLines.reduce((s, l) => s + l.amount, 0) + retainedEarnings);
+  let totalEquity = r2(equityLines.reduce((s, l) => s + l.amount, 0) + retainedEarnings);
+
+  // QuickBooks 2016 holds the official opening balances for loans, equity,
+  // and assets; this app usually knows only the bank and card statement
+  // balances at go-live. Rather than hide the gap, show it as its own clearly
+  // labeled line so the page balances and the reader knows why.
+  const carriedFromQuickBooks = r2(totalAssets - totalLiabilities - totalEquity);
+  if (Math.abs(carriedFromQuickBooks) >= 0.05) {
+    equityLines.push({ name: "Opening balances carried in QuickBooks (not tracked here)", amount: carriedFromQuickBooks });
+    totalEquity = r2(totalEquity + carriedFromQuickBooks);
+  }
 
   return {
     asOf, cashLines, assetLines, liabilityLines, equityLines,
-    retainedEarnings: r2(retainedEarnings),
+    retainedEarnings,
     totalAssets, totalLiabilities, totalEquity,
     balances: Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.05,
+    carriedFromQuickBooks: Math.abs(carriedFromQuickBooks) >= 0.05 ? carriedFromQuickBooks : 0,
   };
 }
 
@@ -167,48 +196,70 @@ export type CashFlow = {
   outLines: ReportLine[];
 };
 
+/**
+ * Cash = bank accounts only. A credit card charge is not cash until the card
+ * is paid; the payment shows up here as a transfer out of the bank.
+ */
 export function cashFlow(
   txns: TxnLite[],
   accounts: AccountLite[],
   from: Date,
   to: Date
 ): CashFlow {
-  const openingBank = accounts.filter((a) => a.type === "bank").reduce((s, a) => s + a.openingBalance, 0);
-  const before = txns.filter((t) => t.date < from);
-  const openingCash = r2(
-    openingBank + before.reduce((s, t) => s + (t.flow === "in" ? t.amount : -t.amount), 0)
-  );
-  const inScope = txns.filter((t) => inRange(t, from, to));
-  const cashIn = r2(inScope.filter((t) => t.flow === "in").reduce((s, t) => s + t.amount, 0));
-  const cashOut = r2(inScope.filter((t) => t.flow === "out").reduce((s, t) => s + t.amount, 0));
-  const netChange = r2(cashIn - cashOut);
-
+  const ledger = asLedger(txns, accounts);
+  const banks = accounts.filter((a) => a.type === "bank");
+  const bankIds = new Set(banks.map((a) => a.id));
   const byId = new Map(accounts.map((a) => [a.id, a]));
-  const group = (flow: "in" | "out") => {
-    const totals = new Map<string, number>();
-    for (const t of inScope) {
-      if (t.flow !== flow) continue;
-      const name = (t.accountId && byId.get(t.accountId)?.name) || "Uncategorized";
-      totals.set(name, (totals.get(name) ?? 0) + t.amount);
-    }
-    return [...totals.entries()].map(([name, amount]) => ({ name, amount: r2(amount) })).sort((a, b) => b.amount - a.amount);
-  };
+  const dayBefore = new Date(from.getTime() - 1);
+  const sumBanks = (m: Map<string, number>) => r2(banks.reduce((s, a) => s + (m.get(a.id) ?? 0), 0));
+  const openingCash = sumBanks(accountBalances(ledger, accounts as LedgerAccount[], dayBefore));
+  const closingCash = sumBanks(accountBalances(ledger, accounts as LedgerAccount[], to));
 
-  return {
-    from, to, cashIn, cashOut, netChange, openingCash,
-    closingCash: r2(openingCash + netChange),
-    inLines: group("in"),
-    outLines: group("out"),
-  };
+  const ins = new Map<string, number>();
+  const outs = new Map<string, number>();
+  const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
+  for (const t of ledger) {
+    if (!inRange(t, from, to)) continue;
+    if (!t.registerAccountId || !bankIds.has(t.registerAccountId)) {
+      // money leaving another account INTO a bank via transfer (e.g. loan proceeds recorded on the loan side)
+      if (t.kind === "transfer" && t.transferAccountId && bankIds.has(t.transferAccountId)) {
+        const reg = t.registerAccountId ? byId.get(t.registerAccountId) : undefined;
+        const acc = byId.get(t.transferAccountId)!;
+        if (!countsForRegister(acc as LedgerAccount, t.date)) continue;
+        const label = `Transfer ${t.flow === "out" ? "from" : "to"} ${reg?.name ?? "other account"}`;
+        if (t.flow === "out") add(ins, label, t.amount); else add(outs, label, t.amount);
+      }
+      continue;
+    }
+    const reg = byId.get(t.registerAccountId)!;
+    if (!countsForRegister(reg as LedgerAccount, t.date)) continue;
+    const target = t.flow === "in" ? ins : outs;
+    if (t.kind === "transfer") {
+      const other = t.transferAccountId ? byId.get(t.transferAccountId) : undefined;
+      if (other && bankIds.has(other.id)) continue; // bank-to-bank: no net cash effect, both sides in banks
+      add(target, `Transfer ${t.flow === "in" ? "from" : "to"} ${other?.name ?? "other account"}`, t.amount);
+      continue;
+    }
+    for (const l of categoryLines(t)) {
+      add(target, (l.accountId && byId.get(l.accountId)?.name) || "Uncategorized", l.amount);
+    }
+  }
+  const lines = (m: Map<string, number>) =>
+    [...m.entries()].map(([name, amount]) => ({ name, amount: r2(amount) })).filter((l) => l.amount !== 0).sort((a, b) => b.amount - a.amount);
+  const inLines = lines(ins);
+  const outLines = lines(outs);
+  const cashIn = r2(inLines.reduce((s, l) => s + l.amount, 0));
+  const cashOut = r2(outLines.reduce((s, l) => s + l.amount, 0));
+  return { from, to, cashIn, cashOut, netChange: r2(cashIn - cashOut), openingCash, closingCash, inLines, outLines };
 }
 
 // ---- monthly series + plain-language callouts ------------------------------
 
 export type MonthPoint = { month: string; income: number; expense: number; net: number };
 
-export function monthlySeries(txns: TxnLite[], monthKeys: string[]): MonthPoint[] {
+export function monthlySeries(txns: TxnLite[], monthKeys: string[], accounts?: AccountLite[]): MonthPoint[] {
   const map = new Map(monthKeys.map((m) => [m, { month: m, income: 0, expense: 0, net: 0 }]));
-  for (const t of txns) {
+  for (const t of accounts ? pl(txns, accounts) : txns) {
     const key = `${t.date.getFullYear()}-${String(t.date.getMonth() + 1).padStart(2, "0")}`;
     const p = map.get(key);
     if (!p) continue;
@@ -236,7 +287,7 @@ export function spendingCallouts(
 ): Callout[] {
   const byId = new Map(accounts.map((a) => [a.id, a]));
   const totals = new Map<string, { curr: number; prev: number }>();
-  for (const t of txns) {
+  for (const t of pl(txns, accounts)) {
     if (t.flow !== "out" || !t.accountId) continue;
     const acc = byId.get(t.accountId);
     if (!acc || acc.type !== "expense") continue;

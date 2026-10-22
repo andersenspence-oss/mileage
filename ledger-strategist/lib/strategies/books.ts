@@ -1,5 +1,8 @@
 // Builds the per-entity 12-month books summary the analyzer consumes.
 import { prisma } from "../db";
+import { LEDGER_TXN_SELECT, LEDGER_ACCOUNT_SELECT, toTxnLite } from "../reportData";
+import { asLedger } from "../reports";
+import { plLines } from "../ledger";
 
 export type EntityBooks = {
   slug: string;
@@ -20,21 +23,22 @@ export async function buildBooksSummaries(): Promise<EntityBooks[]> {
 
   const out: EntityBooks[] = [];
   for (const e of entities) {
-    const [txns, accounts] = await Promise.all([
-      prisma.transaction.findMany({
-        where: { entityId: e.id, date: { gte: from, lte: to } },
-        select: { amount: true, flow: true, account: { select: { name: true, type: true } } },
-      }),
+    const [rows, accounts] = await Promise.all([
+      prisma.transaction.findMany({ where: { entityId: e.id, date: { gte: from, lte: to } }, select: LEDGER_TXN_SELECT }),
       prisma.account.findMany({ where: { entityId: e.id } }),
     ]);
+    const lite = accounts.map((a) => ({ id: a.id, name: a.name, type: a.type, openingBalance: a.openingBalance, startDate: a.startDate }));
+    const nameById = new Map(accounts.map((a) => [a.id, a.name]));
+    // profit lines only: transfers, owner draws, loan principal, etc. are not expenses
+    const lines = plLines(asLedger(rows.map(toTxnLite), lite), lite);
 
     let income12 = 0, expense12 = 0;
     const spendByAccount: Record<string, number> = {};
-    for (const t of txns) {
+    for (const t of lines) {
       if (t.flow === "in") income12 += t.amount;
       else {
         expense12 += t.amount;
-        const name = t.account?.name ?? "Uncategorized";
+        const name = (t.accountId && nameById.get(t.accountId)) || "Uncategorized";
         spendByAccount[name] = (spendByAccount[name] ?? 0) + t.amount;
       }
     }

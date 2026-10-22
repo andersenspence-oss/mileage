@@ -8,16 +8,25 @@ datasource db {
 }
 
 model Entity {
-  id           String          @id @default(cuid())
-  slug         String          @unique
-  name         String
-  kind         String // clinic | media | rental_realestate | holding | operating | other
-  color        String          @default("#14532d")
-  notes        String?
-  sort         Int             @default(0)
-  connection   QboConnection?
-  accounts     Account[]
-  transactions Transaction[]
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  name          String
+  kind          String // clinic | media | rental_realestate | holding | operating | other
+  color         String         @default("#14532d")
+  notes         String?
+  sort          Int            @default(0)
+  // Lifecycle: entities come and go as businesses are bought and sold.
+  // A sold entity keeps its full history for taxes and the CPA but drops out
+  // of daily bookkeeping screens.
+  status        String         @default("active") // active | sold | closed
+  acquiredOn    DateTime?
+  soldOn        DateTime?
+  connection    QboConnection?
+  accounts      Account[]
+  transactions  Transaction[]
+  qbNames       QbName[]
+  payrollRuns   PayrollRun[]
+  exportBatches ExportBatch[]
 }
 
 // QuickBooks Online connection per entity. Tokens are AES-256-GCM encrypted
@@ -48,32 +57,72 @@ model Account {
   type           String
   subtype        String?
   openingBalance Float         @default(0)
-  transactions   Transaction[]
+  // --- QuickBooks 2016 Desktop bridge ---
+  // Exact account name in QuickBooks, including parent path ("Auto:Fuel").
+  // Required before a transaction using this account can be exported (IIF).
+  qbName         String?
+  fromQb         Boolean       @default(false)
+  // --- Registers (bank + credit card accounts) ---
+  // Go-live cutoff: activity on or before this date is already in QuickBooks.
+  // openingBalance is the statement balance as of this date (amount owed for
+  // credit cards). Register balances and reconciliation start here.
+  startDate      DateTime?
+  last4          String?
+  csvProfileJson String? // remembered column mapping for this bank's CSV
+  archived       Boolean       @default(false)
+  transactions   Transaction[] @relation("category")
+  registerTxns   Transaction[] @relation("register")
+  transferTxns   Transaction[] @relation("transferTo")
+  splits         TxnSplit[]
 
   @@index([entityId, type])
 }
 
 model Transaction {
-  id             String               @id @default(cuid())
-  entityId       String
-  entity         Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  accountId      String?
-  account        Account?             @relation(fields: [accountId], references: [id])
-  qboId          String?
-  date           DateTime
+  id                 String               @id @default(cuid())
+  entityId           String
+  entity             Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  accountId          String?
+  account            Account?             @relation("category", fields: [accountId], references: [id])
+  // The bank or credit card account the money moved through. Null only on
+  // legacy demo data (treated as the entity's first bank account).
+  registerAccountId  String?
+  registerAccount    Account?             @relation("register", fields: [registerAccountId], references: [id])
+  kind               String               @default("standard") // standard | transfer
+  // transfer: the other balance-sheet account (bank, card, loan, owner equity)
+  transferAccountId  String?
+  transferAccount    Account?             @relation("transferTo", fields: [transferAccountId], references: [id])
+  payee              String? // QuickBooks name (vendor/customer) when known
+  checkNum           String?
+  memo               String?
+  origin             String               @default("import") // import | manual | payroll | qbo | demo
+  payrollRunId       String?
+  // QuickBooks 2016 export state
+  //   pending  = not in QuickBooks yet
+  //   exported = included in an IIF export batch
+  //   in_qb    = dated on/before go-live: already in QuickBooks, never export
+  qbStatus           String               @default("pending")
+  exportBatchId      String?
+  changedAfterExport Boolean              @default(false)
+  splits             TxnSplit[]
+  clears             TxnClear[]
+  qboId              String?
+  date               DateTime
   // amount is always positive; flow says which direction money moved
-  amount         Float
-  flow           String // in | out
-  vendor         String?
-  description    String?
+  amount             Float
+  flow               String // in | out
+  vendor             String?
+  description        String?
   // categorized | uncategorized | suggested | approved
-  categoryStatus String               @default("categorized")
-  source         String               @default("demo") // demo | qbo
-  suggestions    CategorySuggestion[]
-  flags          AnomalyFlag[]
+  categoryStatus     String               @default("categorized")
+  source             String               @default("demo") // demo | qbo
+  suggestions        CategorySuggestion[]
+  flags              AnomalyFlag[]
 
   @@index([entityId, date])
   @@index([categoryStatus])
+  @@index([registerAccountId, date])
+  @@index([qbStatus])
 }
 
 model CategorySuggestion {
@@ -93,6 +142,7 @@ model VendorRule {
   id            String   @id @default(cuid())
   vendorPattern String
   accountName   String
+  payeeName     String? // QuickBooks name to use for this vendor, when learned
   entitySlug    String? // null = applies to all entities
   hits          Int      @default(1)
   updatedAt     DateTime @updatedAt
@@ -225,4 +275,101 @@ model MileageTrip {
 
   @@index([date])
   @@index([entitySlug])
+}
+
+// A transaction split across several categories (or a payroll entry). Amounts
+// run in the transaction's own direction and sum to its amount; a negative
+// split is allowed (e.g. withholdings held back from gross wages).
+model TxnSplit {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       Account     @relation(fields: [accountId], references: [id])
+  amount        Float
+  memo          String?
+  sort          Int         @default(0)
+
+  @@index([transactionId])
+}
+
+// Cleared / reconciled state of a transaction on ONE register. A transfer
+// between two registers has two of these. importFingerprint records the bank
+// or card CSV line that this posting corresponds to, which is how re-imports
+// and overlapping downloads are recognized as duplicates.
+model TxnClear {
+  id                String          @id @default(cuid())
+  transactionId     String
+  transaction       Transaction     @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  accountId         String
+  cleared           Boolean         @default(false)
+  reconciliationId  String?
+  reconciliation    Reconciliation? @relation(fields: [reconciliationId], references: [id])
+  importFingerprint String?
+  bankDescription   String?
+
+  @@unique([transactionId, accountId])
+  @@index([accountId, importFingerprint])
+}
+
+model ImportBatch {
+  id                String   @id @default(cuid())
+  registerAccountId String
+  fileName          String
+  rawCsv            String
+  mappingJson       String?
+  status            String   @default("preview") // preview | imported | discarded
+  added             Int      @default(0)
+  matched           Int      @default(0)
+  duplicates        Int      @default(0)
+  createdAt         DateTime @default(now())
+}
+
+model Reconciliation {
+  id                String     @id @default(cuid())
+  registerAccountId String
+  statementDate     DateTime
+  beginningBalance  Float
+  endingBalance     Float
+  status            String     @default("in_progress") // in_progress | finished
+  finishedAt        DateTime?
+  createdAt         DateTime   @default(now())
+  clears            TxnClear[]
+}
+
+// Names from the QuickBooks 2016 vendor / customer / other-name lists, so
+// exports use names QuickBooks already knows instead of creating new ones.
+model QbName {
+  id       String  @id @default(cuid())
+  entityId String
+  entity   Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  name     String
+  listType String // vendor | customer | other | employee
+  is1099   Boolean @default(false)
+
+  @@unique([entityId, name])
+}
+
+model ExportBatch {
+  id          String   @id @default(cuid())
+  entityId    String
+  entity      Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  throughDate DateTime
+  txnCount    Int
+  total       Float    @default(0)
+  iif         String
+  status      String   @default("exported") // exported | undone
+  createdAt   DateTime @default(now())
+}
+
+// One ADP payroll, entered from ADP's payroll summary. Generates balanced
+// bank entries through a payroll liability account.
+model PayrollRun {
+  id            String   @id @default(cuid())
+  entityId      String
+  entity        Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  bankAccountId String
+  payDate       DateTime
+  dataJson      String
+  createdAt     DateTime @default(now())
 }

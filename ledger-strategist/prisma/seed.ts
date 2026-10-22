@@ -158,7 +158,27 @@ const PERSONAL_VENDORS = ["Costco", "Sky Mountain Golf", "Amazon Marketplace", "
 
 async function main() {
   console.log("Seeding database...");
+  // SAFETY: seeding wipes the books. Refuse once real bookkeeping exists
+  // (imported bank lines, manual entries, payroll, QuickBooks lists) unless
+  // explicitly forced. Running `npm run seed` must never destroy real work.
+  const realTxns = await prisma.transaction.count({ where: { origin: { not: "demo" } } });
+  const realAccounts = await prisma.account.count({ where: { fromQb: true } });
+  if ((realTxns > 0 || realAccounts > 0) && !process.argv.includes("--force-wipe-real-books")) {
+    console.log(
+      `\nSTOPPED: this database holds real bookkeeping (${realTxns} real transactions, ${realAccounts} QuickBooks accounts).\n` +
+      "Seeding would erase it. Nothing was changed.\n" +
+      "To clear only the demo data, use the 'Clear demo data' button on the Entities page instead."
+    );
+    return;
+  }
   // wipe (idempotent reseed)
+  await prisma.txnClear.deleteMany();
+  await prisma.txnSplit.deleteMany();
+  await prisma.reconciliation.deleteMany();
+  await prisma.importBatch.deleteMany();
+  await prisma.exportBatch.deleteMany();
+  await prisma.payrollRun.deleteMany();
+  await prisma.qbName.deleteMany();
   await prisma.anomalyFlag.deleteMany();
   await prisma.categorySuggestion.deleteMany();
   await prisma.transaction.deleteMany();
@@ -279,7 +299,14 @@ async function main() {
       });
     }
 
-    await prisma.transaction.createMany({ data: rows });
+    // every demo transaction runs through the entity's checking register
+    let bankId = def.accounts.find((a) => a.type === "bank") ? accountByName.get(def.accounts.find((a) => a.type === "bank")!.name)! : null;
+    if (!bankId) {
+      bankId = (await prisma.account.create({ data: { entityId: entity.id, name: "Checking", type: "bank" } })).id;
+    }
+    await prisma.transaction.createMany({
+      data: rows.map((t) => ({ ...t, registerAccountId: bankId, origin: "demo" })),
+    });
     console.log(`  ${def.name}: ${rows.length} transactions`);
   }
 
