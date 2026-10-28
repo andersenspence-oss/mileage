@@ -11,6 +11,12 @@
    "name": "Short Stack 10.28.26 (one script)",
    "note": "All 20 WCU shorts in one continuous script",
    "file": "short-stack-10-28-26-full.json"
+  },
+  {
+   "id": "pa-scripts-8-9",
+   "name": "Posture Academy Scripts 8 and 9",
+   "note": "Lower back giving out, and headaches at the base of the skull",
+   "file": "scripts-8-9.json"
   }
  ]
 }
