@@ -71,6 +71,11 @@ button{cursor:pointer}
 .meta .folder{color:var(--accent)}
 .cardbtns{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}
 .cardbtns .btn{min-height:40px;padding:0 12px;font-size:15px}
+#inbox{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.inboxrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--panel2);border:1px solid var(--accent);border-radius:12px;padding:12px 14px}
+.inboxrow .txt{flex:1 1 220px;min-width:0}
+.inboxrow b{display:block;font-size:17px}
+.inboxrow small{color:var(--muted);font-size:14px}
 .empty{border:1px dashed var(--line);border-radius:14px;padding:28px;color:var(--muted);line-height:1.5;max-width:640px}
 .empty b{color:var(--fg)}
 
@@ -196,6 +201,7 @@ button{cursor:pointer}
           <option value="title">Title A to Z</option>
         </select>
       </div>
+      <div id="inbox" hidden></div>
       <div class="chips" id="folderChips"></div>
     </div>
   </header>
@@ -716,6 +722,46 @@ async function checkHash() {
   if (m) { history.replaceState(null, '', location.pathname + location.search); await importPayload(m[1]); }
 }
 window.addEventListener('hashchange', checkHash);
+
+/* Inbox: script packs Claude publishes next to the app (inbox/index.json) */
+function inboxDone() { try { return JSON.parse(localStorage.getItem('prompter.inboxDone') || '[]'); } catch (e) { return []; } }
+function markInboxDone(id) { try { const d = inboxDone(); if (!d.includes(id)) d.push(id); localStorage.setItem('prompter.inboxDone', JSON.stringify(d)); } catch (e) {} }
+let inboxPacks = [];
+async function checkInbox() {
+  try {
+    const r = await fetch('inbox/index.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const idx = await r.json();
+    const done = inboxDone();
+    inboxPacks = (idx.packs || []).filter(p => !done.includes(p.id));
+    renderInbox();
+  } catch (e) {}
+}
+function renderInbox() {
+  const box = $('#inbox');
+  box.hidden = !inboxPacks.length;
+  box.innerHTML = inboxPacks.map(p => `<div class="inboxrow" data-id="${escHTML(p.id)}"><div class="txt"><b>New from Claude: ${escHTML(p.name)}</b><small>${escHTML(p.note || '')}</small></div><button class="btn primary" data-act="inImport">Import</button><button class="btn ghost" data-act="inSkip">Dismiss</button></div>`).join('');
+}
+$('#inbox').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const row = b.closest('.inboxrow'); const id = row.dataset.id; const pack = inboxPacks.find(p => p.id === id); if (!pack) return;
+  if (b.dataset.act === 'inSkip') { markInboxDone(id); inboxPacks = inboxPacks.filter(p => p.id !== id); renderInbox(); return; }
+  b.disabled = true; b.textContent = 'Importing';
+  try {
+    const r = await fetch('inbox/' + pack.file + '?t=' + Date.now(), { cache: 'no-store' });
+    const d = await r.json();
+    let added = 0, skipped = 0;
+    for (const one of d.scripts || []) {
+      const h = one.html ? one.html : md2html(one.md || one.text || '');
+      if (scripts.some(x => x.html === sanitizeHTML(h))) { skipped++; continue; }
+      await saveNewScript(h, one.t, one.f); added++;
+    }
+    markInboxDone(id); inboxPacks = inboxPacks.filter(p => p.id !== id); renderInbox();
+    if (d.scripts && d.scripts[0] && d.scripts[0].f) { filterFolder = d.scripts[0].f; $('#sortSel').value = 'title'; renderLibrary(); }
+    toast(`Imported ${added} script${added === 1 ? '' : 's'}` + (skipped ? `. ${skipped} were already here.` : ''), 4000);
+  } catch (err) { b.disabled = false; b.textContent = 'Import'; toast('Could not download the scripts. Check your internet and try again.', 4000); }
+});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !$('#library').hidden) checkInbox(); });
 
 /* ================= Editor ================= */
 let edScript = null, edTimer = null;
@@ -1255,6 +1301,7 @@ async function checkPersist() {
   await Store.open();
   await refreshLibrary();
   await checkHash();
+  checkInbox();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

@@ -1,5 +1,5 @@
 // Offline support: the app shell is cached so the prompter works with no signal.
-const CACHE = 'prompter-v2';
+const CACHE = 'prompter-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
