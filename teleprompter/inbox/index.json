@@ -5,6 +5,12 @@
    "name": "Short Stack 10.28.26",
    "note": "20 WCU shorts, Dec 11 to Dec 30",
    "file": "short-stack-10-28-26.json"
+  },
+  {
+   "id": "short-stack-10-28-26-full",
+   "name": "Short Stack 10.28.26 (one script)",
+   "note": "All 20 WCU shorts in one continuous script",
+   "file": "short-stack-10-28-26-full.json"
   }
  ]
 }
