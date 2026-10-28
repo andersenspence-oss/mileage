@@ -472,6 +472,8 @@ function walkClean(src, dst) {
 }
 /* Markdown (what Claude's Copy button gives you) */
 function mdInline(s) {
+  /* Backslash escapes (Google Docs markdown export writes \[ \] \- \. \| etc.) */
+  s = s.replace(/\\([\\`*_{}\[\]()#+\-.!|>~=<"'])/g, (m, c) => '\u0000' + c.charCodeAt(0) + '\u0001');
   s = escHTML(s);
   s = s.replace(/\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*/g, '<strong><em>$1</em></strong>')
        .replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, '<strong>$1</strong>')
@@ -482,7 +484,8 @@ function mdInline(s) {
        .replace(/==(?=\S)(.+?)(?<=\S)==/g, '<mark>$1</mark>')
        .replace(/`([^`]+)`/g, '$1')
        .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-       .replace(/\[([^\]]+)\]\((?:https?:|mailto:)[^)]*\)/g, '$1');
+       .replace(/\[([^\]]+)\]\((?:https?:|mailto:)[^)]*\)/g, '$1')
+       .replace(/\u0000(\d+)\u0001/g, (m, n) => escHTML(String.fromCharCode(+n)));
   return s;
 }
 function md2html(md) {
@@ -687,6 +690,18 @@ $('#importBackupBtn').addEventListener('click', () => { fileMode = 'backup'; $('
 async function importPayload(p) {
   try {
     const d = await decodePayload(p);
+    if (Array.isArray(d.scripts)) {
+      let added = 0, skipped = 0;
+      for (const one of d.scripts) {
+        const h = one.html ? one.html : md2html(one.md || one.text || '');
+        const c = sanitizeHTML(h);
+        if (scripts.some(x => x.html === c)) { skipped++; continue; }
+        await saveNewScript(h, one.t || one.title, one.f || one.folder); added++;
+      }
+      showView('library'); renderLibrary();
+      toast(`Imported ${added} script${added === 1 ? '' : 's'} from Claude` + (skipped ? `. ${skipped} already in your library.` : ''), 4000);
+      return;
+    }
     const html = d.html ? d.html : md2html(d.md || d.text || '');
     const clean = sanitizeHTML(html);
     const existing = scripts.find(s => s.html === clean);
