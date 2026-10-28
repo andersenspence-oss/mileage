@@ -1,0 +1,1248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Prompter">
+<meta name="theme-color" content="#000000">
+<title>Spence Prompter</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=Barlow+Condensed:wght@500;600;700&family=Lexend:wght@400;600&family=Source+Sans+3:ital,wght@0,400;0,700;1,400;1,700&display=swap">
+<style>
+/* Layout: library grid -> editor -> full-bleed prompter stage. Black room, amber tally accent. */
+:root{
+  --bg:#000;
+  --panel:#0e0f11;
+  --panel2:#18191c;
+  --line:#2a2c31;
+  --fg:#f4f3ee;
+  --muted:#9d9c95;
+  --accent:#ffb21e;
+  --accent-ink:#1a1200;
+  --live:#ff4436;
+  --good:#3ddc84;
+  --ui:"Atkinson Hyperlegible",-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --disp:"Barlow Condensed","Arial Narrow",-apple-system,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:17px}
+body{overscroll-behavior:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.view{position:fixed;inset:0;display:flex;flex-direction:column}
+.wrap{width:100%;max-width:1100px;margin:0 auto;padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right))}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);font-weight:700;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:#5a2420;color:#ff8c82}
+.btn.icon{width:44px;padding:0}
+.btn svg{width:20px;height:20px;flex:none}
+.label{font-family:var(--disp);text-transform:uppercase;letter-spacing:.08em;font-weight:600;font-size:13px;color:var(--muted)}
+
+/* Library */
+#library header{padding-top:max(18px,env(safe-area-inset-top));padding-bottom:14px;border-bottom:1px solid var(--line);background:var(--bg)}
+.brandrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+.tally{width:12px;height:12px;border-radius:50%;background:var(--live);box-shadow:0 0 12px var(--live)}
+.brand h1{font-family:var(--disp);font-size:30px;letter-spacing:.04em;text-transform:uppercase;margin:0;font-weight:700}
+.toolrow{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center}
+.search{flex:1 1 220px;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--panel);padding:0 14px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip{min-height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:transparent;font-size:15px}
+.chip[aria-pressed="true"]{background:var(--fg);color:#000;border-color:var(--fg)}
+#libList{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding-top:18px;padding-bottom:max(30px,env(safe-area-inset-bottom))}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card h2{margin:0;font-size:20px;line-height:1.25;text-wrap:balance;overflow-wrap:anywhere}
+.card .snip{color:var(--muted);font-size:15px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:3.9em}
+.meta{display:flex;gap:12px;flex-wrap:wrap;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.meta .folder{color:var(--accent)}
+.cardbtns{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}
+.cardbtns .btn{min-height:40px;padding:0 12px;font-size:15px}
+.empty{border:1px dashed var(--line);border-radius:14px;padding:28px;color:var(--muted);line-height:1.5;max-width:640px}
+.empty b{color:var(--fg)}
+
+/* Editor */
+#editor header{padding-top:max(12px,env(safe-area-inset-top));padding-bottom:12px;border-bottom:1px solid var(--line)}
+.edrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#edTitle{flex:1 1 260px;min-width:0;min-height:44px;font-size:22px;font-weight:700;background:transparent;border:0;border-bottom:1px solid var(--line);padding:0 4px}
+#edFolder{width:200px;min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--panel);padding:0 12px}
+.fmt{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.fmt button{min-width:44px;min-height:40px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-weight:700;padding:0 10px}
+#edBodyWrap{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+#edBody{min-height:60vh;outline:none;padding-top:24px;padding-bottom:40vh;font-size:26px;line-height:1.5}
+#edFoot{border-top:1px solid var(--line);padding-top:10px;padding-bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-variant-numeric:tabular-nums;color:var(--muted);font-size:15px}
+
+/* Shared script typography (editor + prompter) */
+.script p,.script div{margin:0 0 .6em}
+.script h1,.script h2,.script h3{margin:.4em 0 .5em;line-height:1.15;font-weight:700}
+.script h1{font-size:1.35em}.script h2{font-size:1.2em}.script h3{font-size:1.08em}
+.script ul,.script ol{margin:0 0 .6em;padding-left:1.4em}
+.script li{margin:0 0 .3em}
+.script li>p,.script li>div{margin:0}
+.script blockquote{margin:0 0 .6em;padding-left:.6em;border-left:.12em solid var(--muted)}
+.script hr{border:0;border-top:.06em solid #555;margin:.8em 0}
+.script mark{background:#ffe066;color:#000;padding:0 .08em;border-radius:.08em}
+.script [style*="background"]{color:#000}
+.script strong,.script b{font-weight:700}
+.script .cue{display:inline-block;font-family:var(--disp);font-weight:700;letter-spacing:.06em;color:var(--accent);border:.06em solid var(--accent);border-radius:.25em;padding:0 .25em;line-height:1.1;font-size:.8em;vertical-align:.08em}
+.script .note{color:#7d7c76;font-style:italic;font-size:.75em}
+
+/* Prompter */
+#prompter{background:#000;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#stage{position:absolute;inset:0;overflow:hidden}
+#scroller{position:relative;margin:0 auto;will-change:transform;color:#fff}
+#scroller .w.said{color:#8a8a86}
+#readline{position:absolute;left:0;right:0;height:0;pointer-events:none}
+#readline::before,#readline::after{content:"";position:absolute;top:-14px;border:14px solid transparent}
+#readline::before{left:6px;border-left:20px solid var(--accent)}
+#readline::after{right:6px;border-right:20px solid var(--accent)}
+.fade-top,.fade-bot{position:absolute;left:0;right:0;pointer-events:none}
+.fade-top{top:0;background:linear-gradient(#000 0%,rgba(0,0,0,.85) 30%,rgba(0,0,0,0))}
+.fade-bot{bottom:0;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.8) 70%,#000)}
+#endmark{font-family:var(--disp);letter-spacing:.3em;color:var(--live);text-align:center;font-weight:700;padding:.6em 0}
+#count{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.82);pointer-events:none}
+#countNum{font-family:var(--disp);font-weight:700;font-size:min(48vh,60vw);line-height:.9;color:#fff;font-variant-numeric:tabular-nums}
+#countSub{font-family:var(--disp);letter-spacing:.2em;text-transform:uppercase;color:var(--accent);font-size:28px;margin-top:10px}
+#hud{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:center;padding:10px max(20px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left));font-family:var(--disp);font-size:24px;letter-spacing:.06em;color:#9a9a96;pointer-events:none;font-variant-numeric:tabular-nums}
+#hud .mic{display:flex;align-items:center;gap:8px}
+#hudDot{width:14px;height:14px;border-radius:50%;background:#333}
+#hudDot.on{background:var(--good);box-shadow:0 0 10px var(--good)}
+#hudDot.live{background:var(--live);box-shadow:0 0 10px var(--live)}
+
+#controls{position:absolute;left:0;right:0;top:0;background:rgba(10,10,12,.94);border-bottom:1px solid var(--line);padding-top:max(10px,env(safe-area-inset-top));padding-bottom:10px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));display:flex;flex-direction:column;gap:10px;transition:opacity .25s,transform .25s;z-index:5}
+#controls.hide{opacity:0;transform:translateY(-100%);pointer-events:none}
+.crow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.crow .title{font-weight:700;margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40vw}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{min-height:44px;padding:0 14px;background:transparent;border:0;font-weight:700;font-size:15px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.stepper button{width:44px;min-height:44px;background:transparent;border:0;font-size:22px;font-weight:700}
+.stepper span{min-width:64px;text-align:center;font-variant-numeric:tabular-nums;font-size:15px}
+.stepper span small{display:block;font-family:var(--disp);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-size:11px}
+#playBtn{min-width:120px}
+#playBtn.on{background:var(--live);border-color:var(--live);color:#fff}
+.meter{position:relative;width:110px;height:10px;border-radius:5px;background:#222;overflow:hidden}
+.meter i{position:absolute;left:0;top:0;bottom:0;background:var(--good);width:0}
+.meter b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--accent)}
+#sectionSel{min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);padding:0 10px;max-width:220px}
+
+/* Sheet */
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;justify-content:flex-end;z-index:20}
+.sheet .panel{width:min(520px,100%);height:100%;background:var(--panel);border-left:1px solid var(--line);overflow:auto;-webkit-overflow-scrolling:touch;padding:max(16px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(30px,env(safe-area-inset-bottom)) 20px}
+.sheet h3{font-family:var(--disp);text-transform:uppercase;letter-spacing:.08em;font-size:18px;color:var(--accent);margin:26px 0 10px}
+.sheet .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sheet .top h2{margin:0;font-family:var(--disp);text-transform:uppercase;letter-spacing:.06em;font-size:26px}
+.field{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.field>label{font-weight:700}
+.field .hint{grid-column:1/-1;color:var(--muted);font-size:14px;line-height:1.4}
+.field input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+.field output{font-variant-numeric:tabular-nums;color:var(--accent);font-weight:700}
+.field select,.field input[type=number],.field input[type=text]{min-height:40px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);padding:0 10px}
+.switch{appearance:none;-webkit-appearance:none;width:52px;height:30px;border-radius:15px;background:#333;position:relative;transition:background .2s;margin:0}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .2s}
+.switch:checked{background:var(--accent)}
+.switch:checked::after{left:25px}
+.codebox{background:#000;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto;user-select:text;-webkit-user-select:text}
+.keys{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.keys kbd{font-family:var(--ui);font-size:13px;border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--panel2)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+/* Paste modal + confirm */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:30;padding:20px}
+.modal .box{width:min(640px,100%);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px;max-height:90%}
+.modal h2{margin:0;font-size:22px}
+.modal p{margin:0;color:var(--muted);line-height:1.45}
+#pasteZone{min-height:180px;max-height:50vh;overflow:auto;border:1px dashed var(--accent);border-radius:12px;padding:14px;background:#000;font-size:18px;line-height:1.45;outline:none;user-select:text;-webkit-user-select:text}
+#pasteZone:empty::before{content:"Tap here, then Paste";color:var(--muted)}
+
+#toast{position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--fg);color:#000;padding:12px 18px;border-radius:12px;font-weight:700;z-index:50;max-width:90vw;box-shadow:0 6px 30px rgba(0,0,0,.6)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:640px){.crow .title{max-width:60vw}.seg button{padding:0 10px}}
+</style>
+</head>
+<body>
+
+<!-- LIBRARY -->
+<section id="library" class="view">
+  <header>
+    <div class="wrap">
+      <div class="brandrow">
+        <div class="brand"><span class="tally" aria-hidden="true"></span><h1>Prompter</h1></div>
+        <button class="btn primary" id="newBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New script</button>
+        <button class="btn" id="pasteBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/></svg>Paste script</button>
+        <button class="btn" id="importBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import file</button>
+        <button class="btn icon ghost" id="libSettingsBtn" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+        <input type="file" id="fileIn" accept=".txt,.md,.markdown,.html,.htm,.docx,.json,text/plain,text/markdown,text/html,application/json,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+      </div>
+      <div class="toolrow">
+        <input class="search" id="search" type="search" placeholder="Search scripts" autocomplete="off">
+        <select class="btn" id="sortSel" aria-label="Sort">
+          <option value="updated">Recently edited</option>
+          <option value="used">Recently prompted</option>
+          <option value="title">Title A to Z</option>
+        </select>
+      </div>
+      <div class="chips" id="folderChips"></div>
+    </div>
+  </header>
+  <div id="libList"><div class="wrap"><div class="grid" id="grid"></div></div></div>
+</section>
+
+<!-- EDITOR -->
+<section id="editor" class="view" hidden>
+  <header>
+    <div class="wrap">
+      <div class="edrow">
+        <button class="btn icon ghost" id="edBack" aria-label="Back to library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <input id="edTitle" placeholder="Script title" autocomplete="off">
+        <input id="edFolder" placeholder="Folder (optional)" list="folderList" autocomplete="off">
+        <datalist id="folderList"></datalist>
+        <button class="btn primary" id="edPrompt"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>Prompt</button>
+      </div>
+      <div class="fmt" role="toolbar" aria-label="Formatting">
+        <button data-cmd="bold" aria-label="Bold"><b>B</b></button>
+        <button data-cmd="italic" aria-label="Italic"><i>I</i></button>
+        <button data-cmd="underline" aria-label="Underline"><u>U</u></button>
+        <button data-cmd="h2" aria-label="Heading">H</button>
+        <button data-cmd="p" aria-label="Normal text">¶</button>
+        <button data-cmd="ul" aria-label="Bullet list">• List</button>
+        <button data-cmd="mark" aria-label="Highlight" style="background:#ffe066;color:#000">Highlight</button>
+        <button data-cmd="red" aria-label="Red text" style="color:#ff6b5e">Red</button>
+        <button data-cmd="pause" aria-label="Insert pause cue">[PAUSE]</button>
+        <button data-cmd="note" aria-label="Insert note">((note))</button>
+        <button data-cmd="clear" aria-label="Clear formatting">Clear</button>
+      </div>
+    </div>
+  </header>
+  <div id="edBodyWrap"><div class="wrap"><div id="edBody" class="script" contenteditable="true" spellcheck="true"></div></div></div>
+  <footer id="edFoot"><div class="wrap" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <span id="edStats">0 words</span><span id="edSaved">Saved</span>
+    <span style="margin-left:auto">Cues: <b style="color:var(--accent)">[PAUSE]</b> shows as a marker. <b>((text))</b> is a note you do not read.</span>
+  </div></footer>
+</section>
+
+<!-- PROMPTER -->
+<section id="prompter" class="view" hidden>
+  <div id="stage">
+    <div id="scroller" class="script"></div>
+    <div class="fade-top" id="fadeTop"></div>
+    <div class="fade-bot" id="fadeBot"></div>
+    <div id="readline"></div>
+    <div id="hud"><span id="hudTime">0:00</span><span class="mic"><span id="hudDot"></span><span id="hudMode">MANUAL</span></span><span id="hudPct">0%</span></div>
+    <div id="count" hidden><div id="countNum">5</div><div id="countSub">Get ready</div></div>
+  </div>
+  <div id="controls">
+    <div class="crow">
+      <button class="btn icon ghost" id="prBack" aria-label="Exit prompter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <span class="title" id="prTitle"></span>
+      <select id="sectionSel" aria-label="Jump to section"></select>
+      <button class="btn" id="prRewind" aria-label="Rewind"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 6v12L2 12zM21 6v12l-9-6z"/></svg>Back</button>
+      <button class="btn" id="prTop" aria-label="Back to top">Top</button>
+      <button class="btn primary" id="playBtn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg><span>Start</span></button>
+    </div>
+    <div class="crow">
+      <div class="seg" role="group" aria-label="Scroll mode">
+        <button data-mode="manual">Manual</button>
+        <button data-mode="pace">Voice Pace</button>
+        <button data-mode="follow">Voice Follow</button>
+      </div>
+      <div class="meter" id="meter" title="Mic level"><i id="meterFill"></i><b id="meterThr"></b></div>
+      <div class="stepper"><button id="spdDn" aria-label="Slower">−</button><span><output id="spdVal">3.0</output><small>Speed</small></span><button id="spdUp" aria-label="Faster">+</button></div>
+      <div class="stepper"><button id="sizeDn" aria-label="Smaller text">−</button><span><output id="sizeVal">72</output><small>Size</small></span><button id="sizeUp" aria-label="Bigger text">+</button></div>
+      <button class="btn" id="mirrorBtn">Mirror</button>
+      <button class="btn icon" id="fsBtn" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="btn icon" id="prSettingsBtn" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<div class="sheet" id="settings" hidden>
+  <div class="panel" role="dialog" aria-label="Settings">
+    <div class="top"><h2>Settings</h2><button class="btn" id="setClose">Done</button></div>
+
+    <h3>Display</h3>
+    <div class="field"><label for="sFont">Font</label>
+      <select id="sFont">
+        <option value="Atkinson Hyperlegible">Atkinson Hyperlegible</option>
+        <option value="Lexend">Lexend</option>
+        <option value="Source Sans 3">Source Sans</option>
+        <option value="Verdana">Verdana</option>
+        <option value="Helvetica Neue">Helvetica</option>
+        <option value="Arial">Arial</option>
+      </select>
+      <span class="hint">Atkinson Hyperlegible was designed by the Braille Institute for low-vision reading. It is the clearest at a distance.</span></div>
+    <div class="field"><label for="sSize">Text size</label><output id="oSize"></output><input type="range" id="sSize" min="28" max="160" step="2"></div>
+    <div class="field"><label for="sLh">Line spacing</label><output id="oLh"></output><input type="range" id="sLh" min="1.1" max="2.2" step="0.05"></div>
+    <div class="field"><label for="sWidth">Text width</label><output id="oWidth"></output><input type="range" id="sWidth" min="40" max="100" step="2"><span class="hint">Narrower keeps your eyes closer to the lens.</span></div>
+    <div class="field"><label for="sRead">Reading line height</label><output id="oRead"></output><input type="range" id="sRead" min="12" max="60" step="1"><span class="hint">Set this level with your camera lens.</span></div>
+    <div class="field"><label for="sAlign">Alignment</label><select id="sAlign"><option value="left">Left</option><option value="center">Center</option></select></div>
+    <div class="field"><label for="sMirH">Mirror (flip left to right)</label><input type="checkbox" class="switch" id="sMirH"><span class="hint">Turn on when the iPad sits under beam-splitter glass.</span></div>
+    <div class="field"><label for="sMirV">Flip upside down</label><input type="checkbox" class="switch" id="sMirV"><span class="hint">For rigs where the iPad is mounted above the glass.</span></div>
+    <div class="field"><label for="sFade">Fade text above and below</label><input type="checkbox" class="switch" id="sFade"></div>
+    <div class="field"><label for="sHud">Show timer and mic light</label><input type="checkbox" class="switch" id="sHud"></div>
+    <div class="field"><label for="sSaid">Dim words already read</label><input type="checkbox" class="switch" id="sSaid"><span class="hint">Voice Follow only.</span></div>
+
+    <h3>Start</h3>
+    <div class="field"><label for="sCount">Countdown</label><select id="sCount"><option value="0">Off</option><option value="3">3 seconds</option><option value="5">5 seconds</option><option value="10">10 seconds</option></select><span class="hint">In Voice Pace mode the countdown also measures room noise. Stay quiet until it ends.</span></div>
+    <div class="field"><label for="sBeep">Beep each second</label><input type="checkbox" class="switch" id="sBeep"></div>
+
+    <h3>Voice control</h3>
+    <div class="field"><label>Voice Pace</label><span></span><span class="hint">Scrolls at your set speed while you talk and eases to a stop when you pause. Works offline and handles ad-libs.</span></div>
+    <div class="field"><label>Voice Follow</label><span></span><span class="hint">Listens to your words and keeps the line you are saying on the reading line. Uses iPad dictation, so Siri and Dictation must be on. Ad-libs make it wait until you are back on script.</span></div>
+    <div class="field"><label for="sSens">Mic sensitivity</label><output id="oSens"></output><input type="range" id="sSens" min="4" max="30" step="1"><span class="hint">Higher number means you must speak louder to move the text. Raise it in a noisy room.</span></div>
+    <div class="field"><label for="sHang">Keep scrolling after you stop talking</label><output id="oHang"></output><input type="range" id="sHang" min="0.2" max="3" step="0.1"><span class="hint">Short values stop fast at every breath. Longer values ride through natural pauses.</span></div>
+    <div class="field"><label for="sLang">Voice Follow language</label><select id="sLang"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option><option value="es-US">Spanish (US)</option></select></div>
+
+    <h3>Remote</h3>
+    <div class="field"><label for="sRew">Back button jumps to</label><select id="sRew"><option value="sentence">Start of sentence</option><option value="para">Start of paragraph</option><option value="line1">1 line up</option><option value="line3">3 lines up</option></select><span class="hint">Press twice fast to go back one more.</span></div>
+    <div class="field"><label>Remote buttons</label><button class="btn" id="learnBtn">Learn my remote</button>
+      <div class="hint" style="grid-column:1/-1">
+        Back: <span class="keys" id="kBack"></span>
+        Forward: <span class="keys" id="kFwd"></span>
+        Play or pause: <span class="keys" id="kPlay"></span>
+        Any Bluetooth page turner, presentation clicker, or keyboard works. Volume-button shutter remotes cannot be read by Safari.
+      </div></div>
+    <div class="btnrow"><button class="btn ghost" id="keysReset">Reset buttons</button></div>
+
+    <h3>Send scripts from Claude</h3>
+    <div class="field"><label>One-tap import</label><span></span><span class="hint">Claude can turn any script into a link. Tap the link and the script lands in this library with its formatting. Paste the setup below into Claude once (Settings, then Profile, in the box about how Claude should respond). After that, say "send this to my teleprompter."</span></div>
+    <div class="codebox" id="claudeSetup"></div>
+    <div class="btnrow"><button class="btn" id="copySetup">Copy setup text</button><button class="btn ghost" id="testLink">Test an import link</button></div>
+
+    <h3>Storage</h3>
+    <div class="field"><label>Storage status</label><output id="oPersist">Checking</output><span class="hint">Scripts are saved on this iPad only. Export a backup now and then.</span></div>
+    <div class="btnrow"><button class="btn" id="exportBtn">Export backup</button><button class="btn" id="importBackupBtn">Restore backup</button></div>
+  </div>
+</div>
+
+<!-- PASTE MODAL -->
+<div class="modal" id="pasteModal" hidden>
+  <div class="box">
+    <h2>Paste your script</h2>
+    <p>Bold, italics, headings, lists, highlights and colored text from Google Docs or Claude stay as they are.</p>
+    <div id="pasteZone" contenteditable="true"></div>
+    <div class="btnrow" style="justify-content:flex-end"><button class="btn ghost" id="pasteCancel">Cancel</button><button class="btn primary" id="pasteSave">Save script</button></div>
+  </div>
+</div>
+
+<!-- LEARN MODAL -->
+<div class="modal" id="learnModal" hidden>
+  <div class="box" style="text-align:center">
+    <h2 id="learnStep">Press your remote's BACK button</h2>
+    <p id="learnHint">Press the button you want to use. Tap Skip to keep the current one.</p>
+    <div class="btnrow" style="justify-content:center"><button class="btn ghost" id="learnSkip">Skip</button><button class="btn" id="learnCancel">Cancel</button></div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script>
+"use strict";
+/* ================= Utilities ================= */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+let toastT;
+function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
+function fmtTime(s) { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m + ':' + String(s % 60).padStart(2, '0'); }
+function escHTML(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+/* ================= Settings ================= */
+const DEFAULT_KEYS = {
+  back: ['ArrowUp', 'PageUp', 'ArrowLeft'],
+  fwd: ['ArrowDown', 'PageDown', 'ArrowRight'],
+  play: [' ', 'Enter', 'b', 'B', '.', 'MediaPlayPause', 'k', 'K']
+};
+const DEF = { font: 'Atkinson Hyperlegible', size: 72, lh: 1.45, width: 86, read: 30, align: 'left', mirH: true, mirV: false, fade: true, hud: true, said: true,
+  count: 5, beep: false, mode: 'pace', speed: 3, sens: 12, hang: 0.9, lang: 'en-US', rew: 'sentence', keys: DEFAULT_KEYS, wpm: 150 };
+let S = {};
+function loadSettings() { try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem('prompter.settings') || '{}')); } catch (e) { S = Object.assign({}, DEF); } S.keys = Object.assign({}, DEFAULT_KEYS, S.keys || {}); }
+function saveSettings() { try { localStorage.setItem('prompter.settings', JSON.stringify(S)); } catch (e) {} }
+loadSettings();
+
+/* ================= Storage (IndexedDB with fallback) ================= */
+const Store = {
+  db: null, mem: null,
+  async open() {
+    try {
+      this.db = await new Promise((res, rej) => {
+        const r = indexedDB.open('prompter', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('scripts', { keyPath: 'id' });
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+    } catch (e) {
+      try { this.mem = JSON.parse(localStorage.getItem('prompter.scripts') || '[]'); } catch (e2) { this.mem = []; }
+    }
+  },
+  _req(mode, fn) { return new Promise((res, rej) => { const st = this.db.transaction('scripts', mode).objectStore('scripts'); const r = fn(st); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+  _flush() { try { localStorage.setItem('prompter.scripts', JSON.stringify(this.mem)); } catch (e) { toast('Storage is full. Export a backup and delete old scripts.'); } },
+  async all() { return this.db ? this._req('readonly', s => s.getAll()) : [...this.mem]; },
+  async get(id) { return this.db ? this._req('readonly', s => s.get(id)) : this.mem.find(x => x.id === id); },
+  async put(o) { if (this.db) return this._req('readwrite', s => s.put(o)); const i = this.mem.findIndex(x => x.id === o.id); if (i >= 0) this.mem[i] = o; else this.mem.push(o); this._flush(); },
+  async del(id) { if (this.db) return this._req('readwrite', s => s.delete(id)); this.mem = this.mem.filter(x => x.id !== id); this._flush(); }
+};
+
+/* ================= Format conversion ================= */
+const colorCtx = document.createElement('canvas').getContext('2d');
+function parseColor(c) {
+  if (!c) return null; c = c.trim(); if (!c || c === 'transparent' || c === 'inherit' || c === 'initial' || c === 'currentcolor') return null;
+  colorCtx.fillStyle = '#010203'; colorCtx.fillStyle = c; const v = colorCtx.fillStyle;
+  if (v === '#010203' && !/^#?010203$/i.test(c)) return null;
+  let m;
+  if ((m = /^#([0-9a-f]{6})$/i.exec(v))) { const n = parseInt(m[1], 16); return [n >> 16 & 255, n >> 8 & 255, n & 255, 1]; }
+  if ((m = /rgba?\(([^)]+)\)/.exec(v))) { const p = m[1].split(',').map(x => parseFloat(x)); return [p[0], p[1], p[2], p[3] == null ? 1 : p[3]]; }
+  return null;
+}
+function lum([r, g, b]) { const f = x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); }
+function sat([r, g, b]) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); return mx === 0 ? 0 : (mx - mn) / mx; }
+function rgbStr([r, g, b]) { return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`; }
+/* Text colors were picked for white paper. On black, keep real colors (red cues etc), drop black and grays. */
+function textColorForDark(c) {
+  const p = parseColor(c); if (!p || p[3] < 0.2) return null;
+  if (sat(p) < 0.28) return null;
+  let q = p.slice(0, 3), k = 0;
+  while (lum(q) < 0.22 && k < 10) { q = q.map(x => x + (255 - x) * 0.18); k++; }
+  return rgbStr(q);
+}
+function highlightColor(c) {
+  const p = parseColor(c); if (!p || p[3] < 0.2) return null;
+  if (lum(p) > 0.9 && sat(p) < 0.08) return null; /* white paper background */
+  return p;
+}
+const BLOCK = { p: 'p', div: 'div', h1: 'h1', h2: 'h2', h3: 'h3', h4: 'h3', h5: 'h3', h6: 'h3', li: 'li', ul: 'ul', ol: 'ol', blockquote: 'blockquote', pre: 'p', tr: 'div', section: 'div', article: 'div', table: 'div', tbody: 'div', td: 'span', th: 'span', dd: 'div', dt: 'div', figure: 'div', header: 'div', footer: 'div', main: 'div' };
+const SKIP = new Set(['script', 'style', 'meta', 'title', 'link', 'head', 'img', 'svg', 'video', 'audio', 'iframe', 'button', 'input', 'select', 'textarea', 'object', 'embed', 'canvas', 'noscript', 'template']);
+function sanitizeHTML(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const out = document.createElement('div');
+  walkClean(doc.body, out);
+  // tidy: remove empty inline wrappers, merge adjacent identical text styles left as is
+  out.querySelectorAll('strong:empty,em:empty,u:empty,s:empty,span:empty,mark:empty').forEach(n => n.remove());
+  // A block that holds only <br> from Google Docs spacing becomes a blank paragraph spacer
+  return out.innerHTML.trim();
+}
+function walkClean(src, dst) {
+  for (const n of [...src.childNodes]) {
+    if (n.nodeType === 3) { if (n.nodeValue) dst.appendChild(document.createTextNode(n.nodeValue)); continue; }
+    if (n.nodeType !== 1) continue;
+    const tag = n.tagName.toLowerCase();
+    if (SKIP.has(tag)) continue;
+    if (tag === 'br') { dst.appendChild(document.createElement('br')); continue; }
+    if (tag === 'hr') { dst.appendChild(document.createElement('hr')); continue; }
+    const st = (n.getAttribute('style') || '').toLowerCase();
+    const sv = prop => { const m = new RegExp('(?:^|;)\\s*' + prop + '\\s*:\\s*([^;]+)').exec(st); return m ? m[1].trim() : ''; };
+    let top = null, cur = null;
+    const push = el => { if (!top) top = el; else cur.appendChild(el); cur = el; };
+    if (BLOCK[tag]) push(document.createElement(BLOCK[tag]));
+    const fw = sv('font-weight');
+    const isBoldTag = tag === 'b' || tag === 'strong';
+    const bold = (isBoldTag && !/^(normal|[1-5]00|lighter)$/.test(fw)) || /^(bold|bolder|[6-9]00)$/.test(fw);
+    const italic = tag === 'i' || tag === 'em' || tag === 'cite' || /italic|oblique/.test(sv('font-style'));
+    const td = sv('text-decoration') + ' ' + sv('text-decoration-line');
+    const under = tag === 'u' || tag === 'ins' || /underline/.test(td);
+    const strike = tag === 's' || tag === 'strike' || tag === 'del' || /line-through/.test(td);
+    const parentIsHeading = /^h[1-6]$/.test(tag);
+    if (bold && !parentIsHeading) push(document.createElement('strong'));
+    if (italic) push(document.createElement('em'));
+    if (under) push(document.createElement('u'));
+    if (strike) push(document.createElement('s'));
+    let fg = sv('color') || (tag === 'font' ? n.getAttribute('color') : '');
+    const fgc = fg ? textColorForDark(fg) : null;
+    let bgRaw = sv('background-color') || sv('background');
+    const bgc = tag === 'mark' ? (highlightColor(bgRaw) || [255, 224, 102]) : (bgRaw ? highlightColor(bgRaw) : null);
+    if (bgc) { const m = document.createElement('mark'); m.style.background = rgbStr(bgc); m.style.color = lum(bgc) > 0.35 ? '#000' : '#fff'; push(m); }
+    else if (fgc) { const sp = document.createElement('span'); sp.style.color = fgc; push(sp); }
+    if (top) { walkClean(n, cur); dst.appendChild(top); }
+    else walkClean(n, dst);
+  }
+}
+/* Markdown (what Claude's Copy button gives you) */
+function mdInline(s) {
+  s = escHTML(s);
+  s = s.replace(/\*\*\*(?=\S)(.+?)(?<=\S)\*\*\*/g, '<strong><em>$1</em></strong>')
+       .replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, '<strong>$1</strong>')
+       .replace(/__(?=\S)(.+?)(?<=\S)__/g, '<strong>$1</strong>')
+       .replace(/(^|[^*\w])\*(?=\S)([^*]+?)(?<=\S)\*(?!\*)/g, '$1<em>$2</em>')
+       .replace(/(^|[^_\w])_(?=\S)([^_]+?)(?<=\S)_(?![_\w])/g, '$1<em>$2</em>')
+       .replace(/~~(.+?)~~/g, '<s>$1</s>')
+       .replace(/==(?=\S)(.+?)(?<=\S)==/g, '<mark>$1</mark>')
+       .replace(/`([^`]+)`/g, '$1')
+       .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+       .replace(/\[([^\]]+)\]\((?:https?:|mailto:)[^)]*\)/g, '$1');
+  return s;
+}
+function md2html(md) {
+  const lines = md.replace(/\r\n?/g, '\n').split('\n');
+  const out = []; let para = [], list = null, quote = [];
+  const flushP = () => { if (para.length) { out.push('<p>' + para.map(mdInline).join('<br>') + '</p>'); para = []; } };
+  const flushL = () => { if (list) { out.push(`<${list.t}>` + list.items.map(i => '<li>' + mdInline(i) + '</li>').join('') + `</${list.t}>`); list = null; } };
+  const flushQ = () => { if (quote.length) { out.push('<blockquote>' + md2html(quote.join('\n')) + '</blockquote>'); quote = []; } };
+  const flushAll = () => { flushP(); flushL(); flushQ(); };
+  let inFence = false;
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    if (/^\s*```/.test(line)) { inFence = !inFence; flushAll(); continue; }
+    if (inFence) { para.push(line); continue; }
+    let m;
+    if (!line.trim()) { flushAll(); continue; }
+    if ((m = /^>\s?(.*)$/.exec(line))) { flushP(); flushL(); quote.push(m[1]); continue; } else flushQ();
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flushAll(); out.push('<hr>'); continue; }
+    if ((m = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line))) { flushAll(); const l = Math.min(3, m[1].length); out.push(`<h${l}>${mdInline(m[2])}</h${l}>`); continue; }
+    if ((m = /^\s*([-*+•]|\d+[.)])\s+(.*)$/.exec(line))) {
+      flushP(); const t = /\d/.test(m[1]) ? 'ol' : 'ul';
+      if (!list || list.t !== t) { flushL(); list = { t, items: [] }; }
+      list.items.push(m[2]); continue;
+    }
+    if (list && /^\s{2,}\S/.test(raw)) { list.items[list.items.length - 1] += ' ' + line.trim(); continue; }
+    flushL(); para.push(line);
+  }
+  flushAll();
+  return out.join('');
+}
+function looksLikeHTML(s) { return /<\/?(p|div|br|h[1-6]|ul|ol|li|strong|em|b|i|span)\b/i.test(s); }
+function htmlToText(html) { const d = document.createElement('div'); d.innerHTML = html; d.querySelectorAll('br').forEach(b => b.replaceWith('\n')); d.querySelectorAll('p,div,li,h1,h2,h3,blockquote').forEach(b => b.append('\n')); return d.textContent.replace(/\n{3,}/g, '\n\n').trim(); }
+function wordCount(html) { const t = htmlToText(html).replace(/\(\([^)]*\)\)/g, '').replace(/\[[A-Z][A-Z0-9 \-!?.,']{0,30}\]/g, ''); const m = t.match(/[\p{L}\p{N}'’]+/gu); return m ? m.length : 0; }
+function guessTitle(html) {
+  const d = document.createElement('div'); d.innerHTML = html;
+  const h = d.querySelector('h1,h2,h3'); let t = h ? h.textContent : (htmlToText(html).split('\n').find(l => l.trim()) || 'Untitled');
+  t = t.replace(/\s+/g, ' ').trim(); return t.length > 70 ? t.slice(0, 67) + '...' : t || 'Untitled';
+}
+/* Decode a "Send to teleprompter" link payload */
+async function decodePayload(p) {
+  const m = /^([12])\.(.+)$/.exec(p); if (!m) throw new Error('bad');
+  let b64 = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b64.length % 4) b64 += '=';
+  const bin = atob(b64); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  let data = bytes;
+  if (m[1] === '2') {
+    if (!('DecompressionStream' in window)) throw new Error('old');
+    const ds = new DecompressionStream('deflate-raw');
+    const stream = new Blob([bytes]).stream().pipeThrough(ds);
+    data = new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  return JSON.parse(new TextDecoder().decode(data));
+}
+async function encodePayload(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let out = bytes, v = '1';
+  if ('CompressionStream' in window) { out = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()); v = '2'; }
+  let bin = ''; for (let i = 0; i < out.length; i++) bin += String.fromCharCode(out[i]);
+  return v + '.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/* ================= Library ================= */
+let scripts = [], filterFolder = '', confirmId = null;
+async function refreshLibrary() {
+  scripts = await Store.all();
+  renderLibrary();
+}
+function folders() { return [...new Set(scripts.map(s => (s.folder || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
+function renderLibrary() {
+  const q = $('#search').value.trim().toLowerCase();
+  const sort = $('#sortSel').value;
+  let list = scripts.filter(s => (!filterFolder || (s.folder || '') === filterFolder) && (!q || s.title.toLowerCase().includes(q) || (s.text || '').toLowerCase().includes(q)));
+  list.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'used' ? (b.used || 0) - (a.used || 0) : (b.updated || 0) - (a.updated || 0));
+  const fs = folders();
+  $('#folderChips').innerHTML = fs.length ? ['', ...fs].map(f => `<button class="chip" data-f="${escHTML(f)}" aria-pressed="${f === filterFolder}">${f ? escHTML(f) : 'All scripts'}</button>`).join('') : '';
+  $('#folderList').innerHTML = fs.map(f => `<option value="${escHTML(f)}">`).join('');
+  const g = $('#grid');
+  if (!scripts.length) {
+    g.innerHTML = `<div class="empty"><p><b>No scripts yet.</b></p><p>Tap <b>Paste script</b> after copying from Google Docs or Claude, tap <b>Import file</b> for a .docx, .txt or .md file, or tap a <b>Send to teleprompter</b> link from Claude.</p><p>Formatting comes across exactly: bold, italics, underline, headings, lists, highlights and colored text.</p></div>`;
+    return;
+  }
+  if (!list.length) { g.innerHTML = `<div class="empty">No scripts match.</div>`; return; }
+  g.innerHTML = list.map(s => {
+    const wc = s.words || 0, mins = wc / S.wpm;
+    const d = new Date(s.updated || Date.now());
+    const confirming = confirmId === s.id;
+    return `<article class="card" data-id="${s.id}">
+      <h2>${escHTML(s.title)}</h2>
+      <div class="snip">${escHTML((s.text || '').slice(0, 240))}</div>
+      <div class="meta">${s.folder ? `<span class="folder">${escHTML(s.folder)}</span>` : ''}<span>${wc} words</span><span>about ${fmtTime(mins * 60)}</span><span>${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></div>
+      <div class="cardbtns">${confirming
+        ? `<button class="btn danger" data-act="reallydel">Delete for good</button><button class="btn ghost" data-act="canceldel">Keep it</button>`
+        : `<button class="btn primary" data-act="prompt"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>Prompt</button><button class="btn" data-act="edit">Edit</button><button class="btn ghost" data-act="dup">Copy</button><button class="btn ghost" data-act="del">Delete</button>`}</div>
+    </article>`;
+  }).join('');
+}
+async function saveNewScript(html, title, folder) {
+  const clean = sanitizeHTML(html);
+  const now = Date.now();
+  const s = { id: uid(), title: title || guessTitle(clean), folder: folder || filterFolder || '', html: clean, text: htmlToText(clean), words: wordCount(clean), created: now, updated: now, used: 0 };
+  await Store.put(s); scripts.push(s); renderLibrary(); return s;
+}
+$('#grid').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const id = b.closest('.card').dataset.id; const s = scripts.find(x => x.id === id); if (!s) return;
+  const a = b.dataset.act;
+  if (a === 'prompt') openPrompter(s);
+  else if (a === 'edit') openEditor(s);
+  else if (a === 'dup') { const c = Object.assign({}, s, { id: uid(), title: s.title + ' (copy)', updated: Date.now(), created: Date.now() }); await Store.put(c); scripts.push(c); renderLibrary(); toast('Copied'); }
+  else if (a === 'del') { confirmId = id; renderLibrary(); }
+  else if (a === 'canceldel') { confirmId = null; renderLibrary(); }
+  else if (a === 'reallydel') { await Store.del(id); scripts = scripts.filter(x => x.id !== id); confirmId = null; renderLibrary(); toast('Deleted'); }
+});
+$('#folderChips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; filterFolder = c.dataset.f; renderLibrary(); });
+$('#search').addEventListener('input', renderLibrary);
+$('#sortSel').addEventListener('change', renderLibrary);
+$('#newBtn').addEventListener('click', async () => { const s = await saveNewScript('<p></p>', 'Untitled script'); openEditor(s, true); });
+
+/* Paste: try the clipboard directly, fall back to a paste box */
+async function clipboardToHTML() {
+  if (navigator.clipboard && navigator.clipboard.read) {
+    const items = await navigator.clipboard.read();
+    for (const it of items) {
+      if (it.types.includes('text/html')) { const h = await (await it.getType('text/html')).text(); if (h.trim()) return h; }
+    }
+    for (const it of items) {
+      if (it.types.includes('text/plain')) { const t = await (await it.getType('text/plain')).text(); return t; }
+    }
+  }
+  throw new Error('no clipboard');
+}
+function textOrHtmlToHTML(s) {
+  const link = /#s=([12]\.[A-Za-z0-9_-]+)/.exec(s);
+  if (link && !/\s/.test(s.trim())) return { link: link[1] };
+  return { html: looksLikeHTML(s) ? s : md2html(s) };
+}
+$('#pasteBtn').addEventListener('click', async () => {
+  try {
+    const raw = await clipboardToHTML();
+    if (!raw || !raw.trim()) throw new Error('empty');
+    const r = textOrHtmlToHTML(raw);
+    if (r.link) { await importPayload(r.link); return; }
+    const s = await saveNewScript(r.html);
+    toast('Saved: ' + s.title);
+  } catch (e) {
+    $('#pasteZone').innerHTML = ''; $('#pasteModal').hidden = false; setTimeout(() => $('#pasteZone').focus(), 50);
+  }
+});
+function handlePasteEvent(e, target) {
+  const cd = e.clipboardData; if (!cd) return;
+  const html = cd.getData('text/html'); const txt = cd.getData('text/plain');
+  e.preventDefault();
+  let out;
+  if (html && html.trim()) out = sanitizeHTML(html);
+  else { const link = /#s=([12]\.[A-Za-z0-9_-]+)/.exec(txt || ''); if (link && target === 'zone') { $('#pasteModal').hidden = true; importPayload(link[1]); return; } out = sanitizeHTML(md2html(txt || '')); }
+  document.execCommand('insertHTML', false, out);
+}
+$('#pasteZone').addEventListener('paste', e => handlePasteEvent(e, 'zone'));
+$('#pasteCancel').addEventListener('click', () => $('#pasteModal').hidden = true);
+$('#pasteSave').addEventListener('click', async () => {
+  const h = $('#pasteZone').innerHTML; if (!htmlToText(h).trim()) { toast('Nothing pasted yet'); return; }
+  const s = await saveNewScript(h); $('#pasteModal').hidden = true; toast('Saved: ' + s.title);
+});
+
+/* Import files */
+let fileMode = 'scripts';
+$('#importBtn').addEventListener('click', () => { fileMode = 'scripts'; $('#fileIn').click(); });
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+$('#fileIn').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  let n = 0;
+  for (const f of files) {
+    try {
+      const name = f.name.replace(/\.[^.]+$/, '');
+      if (/\.json$/i.test(f.name) || fileMode === 'backup') { n += await restoreBackup(await f.text()); continue; }
+      if (/\.docx$/i.test(f.name)) {
+        if (!window.mammoth) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+        const r = await window.mammoth.convertToHtml({ arrayBuffer: await f.arrayBuffer() }, { styleMap: ["u => u", "strike => s", "highlight => mark"] });
+        await saveNewScript(r.value, name); n++; continue;
+      }
+      const t = await f.text();
+      await saveNewScript(/\.html?$/i.test(f.name) ? t : md2html(t), name); n++;
+    } catch (err) { toast('Could not read ' + f.name + '. Check your internet for Word files.'); }
+  }
+  if (n) toast(n === 1 ? 'Imported 1 script' : `Imported ${n} scripts`);
+});
+
+/* Backup */
+function exportBackup() {
+  const blob = new Blob([JSON.stringify({ app: 'spence-prompter', v: 1, exported: new Date().toISOString(), scripts }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'prompter-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+async function restoreBackup(text) {
+  const d = JSON.parse(text); const arr = Array.isArray(d) ? d : d.scripts || []; let n = 0;
+  for (const s of arr) { if (!s || !s.html) continue; s.id = s.id || uid(); await Store.put(s); n++; }
+  await refreshLibrary(); return n;
+}
+$('#exportBtn').addEventListener('click', exportBackup);
+$('#importBackupBtn').addEventListener('click', () => { fileMode = 'backup'; $('#fileIn').click(); });
+
+/* Link import from Claude */
+async function importPayload(p) {
+  try {
+    const d = await decodePayload(p);
+    const html = d.html ? d.html : md2html(d.md || d.text || '');
+    const clean = sanitizeHTML(html);
+    const existing = scripts.find(s => s.html === clean);
+    if (existing) { toast('Already in your library: ' + existing.title); openEditor(existing); return; }
+    const s = await saveNewScript(html, d.t || d.title, d.f || d.folder);
+    toast('Imported from Claude: ' + s.title, 3500);
+    openEditor(s);
+  } catch (e) { toast('That import link is damaged. Ask Claude to make it again.', 4000); }
+}
+async function checkHash() {
+  const m = /[#&]s=([12]\.[A-Za-z0-9_-]+)/.exec(location.hash);
+  if (m) { history.replaceState(null, '', location.pathname + location.search); await importPayload(m[1]); }
+}
+window.addEventListener('hashchange', checkHash);
+
+/* ================= Editor ================= */
+let edScript = null, edTimer = null;
+function showView(id) { ['library', 'editor', 'prompter'].forEach(v => $('#' + v).hidden = v !== id); }
+function openEditor(s, focus) {
+  edScript = s; showView('editor');
+  $('#edTitle').value = s.title; $('#edFolder').value = s.folder || '';
+  $('#edBody').innerHTML = s.html || '<p><br></p>';
+  $('#edBody').style.fontFamily = `"${S.font}",var(--ui)`;
+  updateEdStats(); $('#edSaved').textContent = 'Saved';
+  if (focus) setTimeout(() => $('#edBody').focus(), 60);
+}
+function updateEdStats() { const wc = wordCount($('#edBody').innerHTML); $('#edStats').textContent = `${wc} words · about ${fmtTime(wc / S.wpm * 60)} at ${S.wpm} words a minute`; }
+function scheduleSave() { $('#edSaved').textContent = 'Saving'; clearTimeout(edTimer); edTimer = setTimeout(saveEditor, 500); }
+async function saveEditor() {
+  clearTimeout(edTimer); if (!edScript) return;
+  const html = $('#edBody').innerHTML;
+  Object.assign(edScript, { title: $('#edTitle').value.trim() || 'Untitled script', folder: $('#edFolder').value.trim(), html, text: htmlToText(html), words: wordCount(html), updated: Date.now() });
+  await Store.put(edScript); $('#edSaved').textContent = 'Saved'; updateEdStats();
+}
+$('#edBody').addEventListener('input', scheduleSave);
+$('#edTitle').addEventListener('input', scheduleSave);
+$('#edFolder').addEventListener('input', scheduleSave);
+$('#edBody').addEventListener('paste', e => { handlePasteEvent(e, 'editor'); scheduleSave(); });
+$('#edBack').addEventListener('click', async () => { await saveEditor(); edScript = null; showView('library'); renderLibrary(); });
+$('#edPrompt').addEventListener('click', async () => { await saveEditor(); openPrompter(edScript); });
+$$('.fmt button').forEach(b => b.addEventListener('mousedown', e => e.preventDefault()));
+$$('.fmt button').forEach(b => b.addEventListener('click', () => {
+  const c = b.dataset.cmd; $('#edBody').focus();
+  try { document.execCommand('styleWithCSS', false, false); } catch (e) {}
+  if (c === 'bold' || c === 'italic' || c === 'underline') document.execCommand(c);
+  else if (c === 'h2') document.execCommand('formatBlock', false, 'h2');
+  else if (c === 'p') document.execCommand('formatBlock', false, 'p');
+  else if (c === 'ul') document.execCommand('insertUnorderedList');
+  else if (c === 'mark') { const sel = getSelection(); if (sel.rangeCount && !sel.isCollapsed) { const t = escHTML(sel.toString()); document.execCommand('insertHTML', false, `<mark>${t}</mark>`); } else toast('Select some words first'); }
+  else if (c === 'red') { document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, '#ff6b5e'); }
+  else if (c === 'pause') document.execCommand('insertText', false, ' [PAUSE] ');
+  else if (c === 'note') document.execCommand('insertText', false, ' ((note)) ');
+  else if (c === 'clear') { document.execCommand('removeFormat'); document.execCommand('formatBlock', false, 'p'); }
+  scheduleSave();
+}));
+
+/* ================= Prompter ================= */
+const P = { s: null, running: false, pos: 0, vel: 0, maxPos: 0, readY: 0, words: [], tops: [], lines: [], sentStarts: [], paraStarts: [],
+  ci: 0, followTarget: null, anim: null, holdUntil: 0, elapsed: 0, counting: false, lastBack: 0, uiTimer: 0, frameId: 0, lastT: 0, sections: [] };
+const scroller = $('#scroller'), stage = $('#stage');
+
+function applyLook() {
+  const sc = scroller.style;
+  sc.fontFamily = `"${S.font}",${S.font === 'Atkinson Hyperlegible' ? '' : '"Atkinson Hyperlegible",'}-apple-system,Arial,sans-serif`;
+  sc.fontSize = S.size + 'px'; sc.lineHeight = S.lh; sc.width = S.width + '%'; sc.textAlign = S.align;
+  const H = stage.clientHeight;
+  P.readY = Math.round(H * S.read / 100);
+  sc.paddingTop = P.readY + 'px'; sc.paddingBottom = H + 'px';
+  $('#readline').style.top = (P.readY + S.size * S.lh * 0.5) + 'px';
+  $('#fadeTop').style.height = Math.max(0, P.readY - S.size * 0.2) + 'px';
+  $('#fadeBot').style.height = Math.round(H * 0.28) + 'px';
+  $('#fadeTop').hidden = $('#fadeBot').hidden = !S.fade;
+  $('#hud').hidden = !S.hud;
+  stage.style.transform = `scale(${S.mirH ? -1 : 1},${S.mirV ? -1 : 1})`;
+  $('#mirrorBtn').classList.toggle('primary', S.mirH);
+  $('#mirrorBtn').textContent = S.mirH ? 'Mirrored' : 'Mirror';
+  $('#spdVal').textContent = S.speed.toFixed(1);
+  $('#sizeVal').textContent = S.size;
+  $$('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode));
+  $('#meter').hidden = S.mode === 'manual';
+  $('#hudMode').textContent = { manual: 'MANUAL', pace: 'VOICE PACE', follow: 'VOICE FOLLOW' }[S.mode];
+}
+function normWord(w) { return w.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[’]/g, "'").replace(/[^a-z0-9']/g, '').replace(/'/g, ''); }
+function buildScript(html) {
+  scroller.innerHTML = sanitizeHTML(html) + '<div id="endmark">■ END ■</div>';
+  // cues and notes
+  const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT);
+  const texts = []; while (walker.nextNode()) texts.push(walker.currentNode);
+  const cueRe = /(\[[A-Z][A-Z0-9 \-!?.,']{0,30}\]|\(\([^)]*\)\))/;
+  for (const t of texts) {
+    if (t.parentNode.id === 'endmark') continue;
+    const parts = t.nodeValue.split(cueRe); if (parts.length < 2 && !t.nodeValue.trim()) continue;
+    const frag = document.createDocumentFragment();
+    for (const part of parts) {
+      if (!part) continue;
+      if (cueRe.test(part) && part.length === (part.match(cueRe) || [''])[0].length) {
+        const sp = document.createElement('span'); sp.className = part.startsWith('((') ? 'note' : 'cue'; sp.textContent = part.startsWith('((') ? part.slice(2, -2) : part.slice(1, -1); frag.appendChild(sp);
+      } else {
+        for (const tok of part.split(/(\s+)/)) {
+          if (!tok) continue;
+          if (/^\s+$/.test(tok)) frag.appendChild(document.createTextNode(tok));
+          else { const w = document.createElement('span'); w.className = 'w'; w.textContent = tok; frag.appendChild(w); }
+        }
+      }
+    }
+    t.replaceWith(frag);
+  }
+  P.words = $$('#scroller .w').map(el => ({ el, n: normWord(el.textContent), raw: el.textContent }));
+  // sections from headings
+  P.sections = $$('#scroller h1,#scroller h2,#scroller h3');
+  const sel = $('#sectionSel');
+  sel.innerHTML = '<option value="">Sections</option>' + P.sections.map((h, i) => `<option value="${i}">${escHTML(h.textContent.slice(0, 40))}</option>`).join('');
+  sel.hidden = !P.sections.length;
+}
+function measure() {
+  const blkSel = 'p,li,h1,h2,h3,blockquote,div';
+  P.tops = P.words.map(w => w.el.offsetTop);
+  const lines = []; let last = -1e9;
+  P.tops.forEach(t => { if (t > last + 2) { lines.push(t); last = t; } });
+  P.lines = lines;
+  P.sentStarts = []; P.paraStarts = [];
+  let prevBlk = null;
+  P.words.forEach((w, i) => {
+    const blk = w.el.closest(blkSel);
+    const newBlk = blk !== prevBlk; prevBlk = blk;
+    const prev = i > 0 ? P.words[i - 1].raw : '';
+    if (i === 0 || newBlk) P.paraStarts.push(i);
+    if (i === 0 || newBlk || /[.!?:;]["'”’)\]]*$/.test(prev)) P.sentStarts.push(i);
+  });
+  const end = $('#endmark');
+  P.maxPos = Math.max(0, end.offsetTop - P.readY);
+}
+function wordAtPos(pos) {
+  const y = pos + P.readY + 2; let lo = 0, hi = P.tops.length - 1, ans = 0;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (P.tops[m] <= y) { ans = m; lo = m + 1; } else hi = m - 1; }
+  // first word on that line
+  while (ans > 0 && P.tops[ans - 1] === P.tops[ans]) ans--;
+  return ans;
+}
+function posForWord(i) { return P.words.length ? Math.max(0, Math.min(P.maxPos, P.tops[Math.max(0, Math.min(i, P.tops.length - 1))] - P.readY)) : 0; }
+function relayout(keepWord) {
+  const wi = keepWord != null ? keepWord : wordAtPos(P.pos);
+  applyLook(); measure();
+  P.pos = posForWord(wi); P.followTarget = null; P.anim = null; render();
+}
+function render() {
+  P.pos = Math.max(0, Math.min(P.maxPos, P.pos));
+  scroller.style.transform = `translate3d(0,${-P.pos}px,0)`;
+  $('#hudPct').textContent = (P.maxPos ? Math.round(P.pos / P.maxPos * 100) : 0) + '%';
+  $('#hudTime').textContent = fmtTime(P.elapsed);
+}
+function jumpTo(target, dur = 280) { P.anim = { from: P.pos, to: Math.max(0, Math.min(P.maxPos, target)), t0: performance.now(), dur }; P.vel = 0; }
+function setSaid(upto) {
+  if (!S.said || S.mode !== 'follow') return;
+  const prev = P.saidUpto || 0;
+  if (upto > prev) for (let i = prev; i < upto && i < P.words.length; i++) P.words[i].el.classList.add('said');
+  else for (let i = upto; i < prev && i < P.words.length; i++) P.words[i].el.classList.remove('said');
+  P.saidUpto = upto;
+}
+function clearSaid() { P.words.forEach(w => w.el.classList.remove('said')); P.saidUpto = 0; }
+
+function openPrompter(s) {
+  P.s = s; showView('prompter');
+  $('#prTitle').textContent = s.title;
+  buildScript(s.html);
+  P.pos = 0; P.vel = 0; P.elapsed = 0; P.ci = 0; P.running = false; P.saidUpto = 0; P.followTarget = null; P.anim = null;
+  setPlayUI(); showUI(true);
+  const go = () => { relayout(0); };
+  applyLook(); measure(); render();
+  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(go);
+  setTimeout(go, 400);
+  s.used = Date.now(); Store.put(s);
+  requestWake();
+  cancelAnimationFrame(P.frameId); P.lastT = performance.now(); P.frameId = requestAnimationFrame(frame);
+}
+async function closePrompter() {
+  stopRun(); stopMic(); stopRec(); releaseWake();
+  cancelAnimationFrame(P.frameId);
+  if (document.fullscreenElement || document.webkitFullscreenElement) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {} }
+  showView('library'); renderLibrary();
+}
+function setPlayUI() {
+  const b = $('#playBtn');
+  b.classList.toggle('on', P.running || P.counting);
+  b.querySelector('span').textContent = P.counting ? 'Cancel' : P.running ? 'Pause' : (P.pos > 5 ? 'Resume' : 'Start');
+  b.querySelector('svg').innerHTML = (P.running || P.counting) ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4l13 8-13 8z"/>';
+  $('#hudDot').className = P.running ? (S.mode === 'manual' ? 'live' : '') : '';
+}
+async function togglePlay() {
+  if (P.counting) { cancelCount(); return; }
+  if (P.running) { stopRun(); return; }
+  await startRun();
+}
+let countTimer = null;
+async function startRun() {
+  if (P.pos >= P.maxPos - 2) { P.pos = 0; P.ci = 0; clearSaid(); render(); }
+  // mic needs to start from this tap on iPad
+  if (S.mode === 'pace') { const ok = await startMic(); if (!ok) { setMode('manual'); toast('Microphone blocked. Allow it in Safari settings for this site. Using Manual for now.', 5000); } }
+  if (S.mode === 'follow') { const ok = startRec(); if (!ok) return; }
+  if (S.beep) ensureBeepCtx();
+  const n = +S.count;
+  if (n > 0) {
+    P.counting = true; setPlayUI(); hideUISoon();
+    let k = n; const box = $('#count'); box.hidden = false;
+    $('#countSub').textContent = S.mode === 'pace' ? 'Stay quiet' : 'Get ready';
+    $('#countNum').textContent = k; beep(k === 1 ? 1320 : 880);
+    if (S.mode === 'pace') Mic.calib = [];
+    countTimer = setInterval(() => {
+      k--;
+      if (k <= 0) { clearInterval(countTimer); box.hidden = true; P.counting = false; if (S.mode === 'pace') finishCalib(); beginRunning(); return; }
+      $('#countNum').textContent = k; beep(k === 1 ? 1320 : 880);
+    }, 1000);
+  } else beginRunning();
+}
+function beginRunning() { P.running = true; P.holdUntil = 0; setPlayUI(); hideUISoon(); if (S.mode === 'follow') { P.ci = wordAtPos(P.pos); } }
+function cancelCount() { clearInterval(countTimer); P.counting = false; $('#count').hidden = true; stopMic(); stopRec(); setPlayUI(); showUI(true); }
+function stopRun() { P.running = false; P.vel = 0; clearInterval(countTimer); P.counting = false; $('#count').hidden = true; setPlayUI(); showUI(true); saveSpot(); }
+function saveSpot() { if (P.s) { P.s.lastWord = wordAtPos(P.pos); Store.put(P.s); } }
+function speedPx() { return S.speed * S.size * 0.22; }
+
+function frame(t) {
+  const dt = Math.min(0.06, (t - P.lastT) / 1000); P.lastT = t;
+  const now = performance.now();
+  if (S.mode === 'pace' && Mic.an) micTick(now);
+  if (P.anim) {
+    const k = Math.min(1, (now - P.anim.t0) / P.anim.dur); const e = 1 - Math.pow(1 - k, 3);
+    P.pos = P.anim.from + (P.anim.to - P.anim.from) * e; if (k >= 1) P.anim = null;
+  } else if (P.running) {
+    P.elapsed += dt;
+    if (S.mode === 'follow') {
+      if (P.followTarget != null) { const d = P.followTarget - P.pos; P.pos += d * Math.min(1, dt * 3.2); }
+    } else {
+      let want = 0;
+      if (now >= P.holdUntil) want = S.mode === 'manual' ? speedPx() : (Mic.active ? speedPx() : 0);
+      const rate = want > P.vel ? 3.5 : 5;
+      P.vel += (want - P.vel) * Math.min(1, dt * rate);
+      if (Math.abs(P.vel) < 0.5 && want === 0) P.vel = 0;
+      P.pos += P.vel * dt;
+    }
+    if (P.pos >= P.maxPos) { P.pos = P.maxPos; P.running = false; P.vel = 0; setPlayUI(); showUI(true); stopMic(); stopRec(); toast('End of script. Total time ' + fmtTime(P.elapsed)); }
+  }
+  render();
+  P.frameId = requestAnimationFrame(frame);
+}
+
+/* Rewind / forward */
+function stepBack() {
+  const now = performance.now(); const quick = now - P.lastBack < 900; P.lastBack = now;
+  const cur = P.anim ? P.anim.to : P.pos;
+  let target;
+  if (S.rew === 'line1' || S.rew === 'line3') {
+    const n = S.rew === 'line1' ? 1 : 3; const y = cur + P.readY;
+    let idx = P.lines.findIndex(l => l > y - 2); if (idx < 0) idx = P.lines.length;
+    target = P.lines[Math.max(0, idx - n)] - P.readY;
+  } else {
+    const arr = S.rew === 'para' ? P.paraStarts : P.sentStarts;
+    const curW = wordAtPos(cur);
+    // Find the start that is above where you are reading. If you are already at a start, go one more.
+    let k = arr.length - 1; while (k > 0 && arr[k] > curW) k--;
+    let cand = arr[k];
+    if (posForWord(cand) >= cur - S.size * S.lh * 0.5 || quick) cand = arr[Math.max(0, k - 1)];
+    target = posForWord(cand);
+    if (S.mode === 'follow') { P.ci = cand; setSaid(cand); }
+  }
+  jumpTo(target);
+  P.holdUntil = now + 900; P.followTarget = null;
+  if (S.mode === 'follow') P.ci = wordAtPos(Math.max(0, target));
+  flash('◀◀');
+}
+function stepFwd() {
+  const cur = P.anim ? P.anim.to : P.pos; const y = cur + P.readY;
+  let target;
+  if (S.rew === 'line1' || S.rew === 'line3') { const n = S.rew === 'line1' ? 1 : 3; let idx = P.lines.findIndex(l => l > y + 2); if (idx < 0) return; target = P.lines[Math.min(P.lines.length - 1, idx + n - 1)] - P.readY; }
+  else { const arr = S.rew === 'para' ? P.paraStarts : P.sentStarts; const curW = wordAtPos(cur); const nx = arr.find(i => i > curW && posForWord(i) > cur + 2); if (nx == null) return; target = posForWord(nx); }
+  jumpTo(target); P.followTarget = null;
+  if (S.mode === 'follow') { P.ci = wordAtPos(target); setSaid(P.ci); }
+  flash('▶▶');
+}
+let flashEl;
+function flash(sym) {
+  if (!flashEl) { flashEl = document.createElement('div'); flashEl.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:700 90px var(--disp);color:var(--accent);opacity:0;transition:opacity .3s;pointer-events:none'; stage.appendChild(flashEl); }
+  flashEl.textContent = sym; flashEl.style.opacity = .9; clearTimeout(flashEl.t); flashEl.t = setTimeout(() => flashEl.style.opacity = 0, 350);
+}
+
+/* ================= Voice Pace (mic level) ================= */
+const Mic = { stream: null, ctx: null, an: null, buf: null, floor: -58, db: -100, active: false, lastVoice: 0, onFrames: 0, calib: null };
+async function startMic() {
+  if (Mic.an) { if (Mic.ctx.state !== 'running') await Mic.ctx.resume(); return true; }
+  try {
+    Mic.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+    Mic.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await Mic.ctx.resume();
+    const src = Mic.ctx.createMediaStreamSource(Mic.stream);
+    Mic.an = Mic.ctx.createAnalyser(); Mic.an.fftSize = 1024; Mic.an.smoothingTimeConstant = 0;
+    src.connect(Mic.an); Mic.buf = new Float32Array(Mic.an.fftSize);
+    return true;
+  } catch (e) { stopMic(); return false; }
+}
+function stopMic() {
+  if (Mic.stream) Mic.stream.getTracks().forEach(t => t.stop());
+  if (Mic.ctx) try { Mic.ctx.close(); } catch (e) {}
+  Mic.stream = Mic.ctx = Mic.an = null; Mic.active = false; $('#hudDot').className = '';
+}
+function micTick(now) {
+  Mic.an.getFloatTimeDomainData(Mic.buf);
+  let s = 0; for (let i = 0; i < Mic.buf.length; i++) s += Mic.buf[i] * Mic.buf[i];
+  const db = 20 * Math.log10(Math.sqrt(s / Mic.buf.length) + 1e-9);
+  Mic.db = Mic.db * 0.5 + db * 0.5;
+  if (Mic.calib) { Mic.calib.push(Mic.db); }
+  const thr = Mic.floor + S.sens;
+  if (Mic.db > thr) { Mic.onFrames++; if (Mic.onFrames >= 3) Mic.lastVoice = now; }
+  else { Mic.onFrames = 0; if (!Mic.calib) Mic.floor += (Math.min(Mic.db, thr) - Mic.floor) * (Mic.db < Mic.floor ? 0.05 : 0.0008); }
+  Mic.active = now - Mic.lastVoice < S.hang * 1000;
+  const toPct = v => Math.max(0, Math.min(100, (v + 80) / 70 * 100));
+  $('#meterFill').style.width = toPct(Mic.db) + '%';
+  $('#meterThr').style.left = toPct(thr) + '%';
+  $('#meterFill').style.background = Mic.active ? 'var(--good)' : '#666';
+  $('#hudDot').className = Mic.active && P.running ? 'on' : '';
+}
+function finishCalib() {
+  const c = (Mic.calib || []).slice(10).sort((a, b) => a - b); Mic.calib = null;
+  if (c.length > 10) Mic.floor = Math.min(-30, c[Math.floor(c.length * 0.5)] + 2);
+  Mic.lastVoice = 0;
+}
+
+/* ================= Voice Follow (speech recognition) ================= */
+const Rec = { r: null, on: false, restartT: 0 };
+function startRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Voice Follow needs Safari on iPadOS 14.5 or newer with Siri and Dictation turned on. Switching to Voice Pace.', 5000); setMode('pace'); return false; }
+  if (Rec.on) return true;
+  Rec.on = true; P.ci = wordAtPos(P.pos);
+  const r = new SR(); Rec.r = r;
+  r.lang = S.lang; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+  r.onresult = ev => {
+    let txt = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) txt += ' ' + ev.results[i][0].transcript;
+    const heard = txt.split(/\s+/).map(normWord).filter(Boolean);
+    if (heard.length) followMatch(heard.slice(-8));
+    $('#hudDot').className = 'on'; clearTimeout(Rec.dotT); Rec.dotT = setTimeout(() => $('#hudDot').className = '', 700);
+  };
+  r.onerror = ev => {
+    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { Rec.on = false; toast('Speech recognition is blocked. Turn on Siri and Dictation in iPad Settings, then allow the mic. Switching to Voice Pace.', 6000); setMode('pace'); stopRun(); }
+  };
+  r.onend = () => { if (Rec.on) { clearTimeout(Rec.restartT); Rec.restartT = setTimeout(() => { try { r.start(); } catch (e) {} }, 120); } };
+  try { r.start(); } catch (e) {}
+  return true;
+}
+function stopRec() { Rec.on = false; clearTimeout(Rec.restartT); if (Rec.r) { try { Rec.r.abort(); } catch (e) {} Rec.r = null; } }
+function similar(a, b) {
+  if (!a || !b) return false; if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
+  if (Math.abs(a.length - b.length) > 1 || a.length < 4) return false;
+  // one edit apart
+  let i = 0, j = 0, ed = 0;
+  while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++ed > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } }
+  return ed + (a.length - i) + (b.length - j) <= 1;
+}
+function followMatch(heard) {
+  if (!P.running || !P.words.length) return;
+  const W = P.words, from = Math.max(0, P.ci - 6), to = Math.min(W.length - 1, P.ci + 45);
+  let best = -1, bestScore = 0;
+  for (let j = from; j <= to; j++) {
+    let score = 0, wi = j;
+    for (let h = heard.length - 1; h >= 0 && wi >= 0 && heard.length - h <= 5; h--) {
+      // allow the script to have a skipped filler word
+      if (similar(heard[h], W[wi].n)) { score += W[wi].n.length > 3 ? 1.2 : 0.8; wi--; }
+      else if (wi > 0 && similar(heard[h], W[wi - 1].n)) { score += 0.6; wi -= 2; }
+      else break;
+    }
+    const dist = j - P.ci; const penalty = dist < 0 ? 0.15 * -dist : 0.012 * dist;
+    score -= penalty;
+    if (score > bestScore) { bestScore = score; best = j; }
+  }
+  const need = heard.length >= 2 ? 1.5 : 1.1;
+  if (best >= 0 && bestScore >= need) {
+    if (best >= P.ci - 1) { P.ci = best; setSaid(best + 1); P.followTarget = posForWord(best); }
+  }
+}
+
+/* ================= Controls ================= */
+function showUI(stay) { $('#controls').classList.remove('hide'); clearTimeout(P.uiTimer); if (!stay) hideUISoon(); }
+function hideUISoon() { clearTimeout(P.uiTimer); P.uiTimer = setTimeout(() => { if (P.running || P.counting) $('#controls').classList.add('hide'); }, 2500); }
+function setMode(m) {
+  const wasRunning = P.running;
+  if (m !== S.mode) { stopMic(); stopRec(); }
+  S.mode = m; saveSettings(); applyLook();
+  if (m !== 'follow') clearSaid(); else { P.ci = wordAtPos(P.pos); setSaid(P.ci); }
+  if (wasRunning) { if (m === 'pace') startMic().then(ok => { if (ok) { Mic.floor = -55; } }); if (m === 'follow') startRec(); }
+  setPlayUI();
+}
+$$('.seg button').forEach(b => b.addEventListener('click', () => { setMode(b.dataset.mode); showUI(); }));
+$('#playBtn').addEventListener('click', togglePlay);
+$('#prBack').addEventListener('click', closePrompter);
+$('#prRewind').addEventListener('click', () => { stepBack(); showUI(); });
+$('#prTop').addEventListener('click', () => { jumpTo(0, 400); P.ci = 0; clearSaid(); P.elapsed = 0; showUI(); });
+$('#spdDn').addEventListener('click', () => { changeSpeed(-0.2); showUI(); });
+$('#spdUp').addEventListener('click', () => { changeSpeed(0.2); showUI(); });
+$('#sizeDn').addEventListener('click', () => { changeSize(-4); showUI(); });
+$('#sizeUp').addEventListener('click', () => { changeSize(4); showUI(); });
+$('#mirrorBtn').addEventListener('click', () => { S.mirH = !S.mirH; saveSettings(); applyLook(); showUI(); });
+$('#sectionSel').addEventListener('change', e => { const i = e.target.value; if (i === '') return; const h = P.sections[+i]; const wi = P.words.findIndex(w => h.contains(w.el)); if (wi >= 0) { jumpTo(posForWord(wi), 400); P.ci = wi; setSaid(wi); } e.target.value = ''; });
+function changeSpeed(d) { S.speed = Math.round(Math.max(0.2, Math.min(12, S.speed + d)) * 10) / 10; saveSettings(); $('#spdVal').textContent = S.speed.toFixed(1); }
+function changeSize(d) { S.size = Math.max(28, Math.min(160, S.size + d)); saveSettings(); relayout(); }
+$('#fsBtn').addEventListener('click', () => {
+  const el = $('#prompter');
+  if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+  const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (fn) { try { const r = fn.call(el); if (r && r.catch) r.catch(() => toast('Full screen is not available here. Add this page to your Home Screen for full screen.')); } catch (e) { toast('Full screen is not available here.'); } }
+  else toast('Full screen is not available here. Add this page to your Home Screen for full screen.');
+});
+document.addEventListener('fullscreenchange', () => setTimeout(() => relayout(), 200));
+document.addEventListener('webkitfullscreenchange', () => setTimeout(() => relayout(), 200));
+window.addEventListener('resize', () => { if (!$('#prompter').hidden) { clearTimeout(P.rz); P.rz = setTimeout(() => relayout(), 150); } });
+
+/* Touch: tap shows controls, double tap play/pause, drag scrolls */
+let drag = null, lastTap = 0;
+stage.addEventListener('pointerdown', e => { drag = { y: e.clientY, start: e.clientY, pos: P.pos, moved: false }; stage.setPointerCapture(e.pointerId); });
+stage.addEventListener('pointermove', e => {
+  if (!drag) return; const dy = e.clientY - drag.y; drag.y = e.clientY;
+  if (Math.abs(e.clientY - drag.start) > 8) drag.moved = true;
+  if (drag.moved) { P.anim = null; P.vel = 0; P.followTarget = null; P.pos -= dy * (S.mirV ? -1 : 1); P.holdUntil = performance.now() + 600; }
+});
+stage.addEventListener('pointerup', e => {
+  if (!drag) return; const moved = drag.moved; drag = null;
+  if (moved) { if (S.mode === 'follow') { P.ci = wordAtPos(P.pos); setSaid(P.ci); } return; }
+  const now = performance.now();
+  if (now - lastTap < 320) { lastTap = 0; togglePlay(); return; }
+  lastTap = now;
+  setTimeout(() => { if (lastTap && performance.now() - lastTap >= 300) { const c = $('#controls'); if (c.classList.contains('hide')) showUI(); else if (P.running) c.classList.add('hide'); } }, 330);
+});
+stage.addEventListener('pointercancel', () => drag = null);
+
+/* Remote and keyboard */
+let learning = null;
+window.addEventListener('keydown', e => {
+  if (learning) { e.preventDefault(); learnKey(e.key); return; }
+  if ($('#prompter').hidden || !$('#settings').hidden) return;
+  const k = e.key;
+  const has = list => list.includes(k);
+  if (has(S.keys.back)) { e.preventDefault(); stepBack(); }
+  else if (has(S.keys.fwd)) { e.preventDefault(); stepFwd(); }
+  else if (has(S.keys.play)) { e.preventDefault(); if (!e.repeat) togglePlay(); }
+  else if (k === 'Home') { e.preventDefault(); jumpTo(0, 400); P.ci = 0; clearSaid(); }
+  else if (k === '+' || k === '=' || k === ']') { e.preventDefault(); changeSpeed(0.2); }
+  else if (k === '-' || k === '_' || k === '[') { e.preventDefault(); changeSpeed(-0.2); }
+  else if (k === 'Escape') { e.preventDefault(); if (P.running || P.counting) stopRun(); else closePrompter(); }
+});
+const learnSteps = [['back', "Press your remote's BACK button"], ['fwd', "Press your remote's FORWARD button"], ['play', "Press your remote's PLAY or PAUSE button"]];
+let learnIdx = 0, learnNew = {};
+function startLearn() { learnIdx = 0; learnNew = {}; learning = true; $('#learnModal').hidden = false; $('#learnStep').textContent = learnSteps[0][1]; }
+function learnKey(key) {
+  if (key === 'Escape') { endLearn(); return; }
+  learnNew[learnSteps[learnIdx][0]] = key; nextLearn();
+}
+function nextLearn() {
+  learnIdx++;
+  if (learnIdx >= learnSteps.length) {
+    for (const [name] of learnSteps) if (learnNew[name]) {
+      for (const o of Object.keys(S.keys)) S.keys[o] = S.keys[o].filter(x => x !== learnNew[name]);
+      S.keys[name] = [learnNew[name], ...S.keys[name]];
+    }
+    saveSettings(); endLearn(); fillSettings(); toast('Remote buttons saved'); return;
+  }
+  $('#learnStep').textContent = learnSteps[learnIdx][1];
+}
+function endLearn() { learning = null; $('#learnModal').hidden = true; }
+$('#learnBtn').addEventListener('click', startLearn);
+$('#learnSkip').addEventListener('click', nextLearn);
+$('#learnCancel').addEventListener('click', endLearn);
+$('#keysReset').addEventListener('click', () => { S.keys = JSON.parse(JSON.stringify(DEFAULT_KEYS)); saveSettings(); fillSettings(); toast('Remote buttons reset'); });
+
+/* Beep */
+let beepCtx = null;
+function ensureBeepCtx() { if (!beepCtx) try { beepCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} if (beepCtx && beepCtx.state !== 'running') beepCtx.resume(); }
+function beep(f) {
+  if (!S.beep || !beepCtx) return;
+  const o = beepCtx.createOscillator(), g = beepCtx.createGain(); o.frequency.value = f; o.connect(g); g.connect(beepCtx.destination);
+  const t = beepCtx.currentTime; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12); o.start(t); o.stop(t + 0.15);
+}
+
+/* Keep the screen awake */
+let wake = null;
+async function requestWake() { try { if ('wakeLock' in navigator) { wake = await navigator.wakeLock.request('screen'); } } catch (e) {} }
+function releaseWake() { try { wake && wake.release(); } catch (e) {} wake = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !$('#prompter').hidden) requestWake(); if (document.visibilityState === 'hidden' && P.running) stopRun(); });
+
+/* ================= Settings sheet ================= */
+const bind = [
+  ['sFont', 'font', v => v], ['sSize', 'size', Number], ['sLh', 'lh', Number], ['sWidth', 'width', Number], ['sRead', 'read', Number],
+  ['sAlign', 'align', v => v], ['sCount', 'count', Number], ['sSens', 'sens', Number], ['sHang', 'hang', Number], ['sLang', 'lang', v => v], ['sRew', 'rew', v => v]
+];
+const toggles = [['sMirH', 'mirH'], ['sMirV', 'mirV'], ['sFade', 'fade'], ['sHud', 'hud'], ['sSaid', 'said'], ['sBeep', 'beep']];
+function outputs() {
+  $('#oSize').textContent = S.size + ' px'; $('#oLh').textContent = S.lh.toFixed(2); $('#oWidth').textContent = S.width + '%'; $('#oRead').textContent = S.read + '% from top';
+  $('#oSens').textContent = S.sens; $('#oHang').textContent = S.hang.toFixed(1) + ' sec';
+}
+function fillSettings() {
+  bind.forEach(([id, k]) => $('#' + id).value = S[k]);
+  toggles.forEach(([id, k]) => $('#' + id).checked = !!S[k]);
+  outputs();
+  const kb = a => a.map(k => `<kbd>${escHTML(k === ' ' ? 'Space' : k)}</kbd>`).join('');
+  $('#kBack').innerHTML = kb(S.keys.back); $('#kFwd').innerHTML = kb(S.keys.fwd); $('#kPlay').innerHTML = kb(S.keys.play);
+  $('#claudeSetup').textContent = claudeSetupText();
+}
+bind.forEach(([id, k, f]) => $('#' + id).addEventListener('input', e => { S[k] = f(e.target.value); saveSettings(); outputs(); if (!$('#prompter').hidden) relayout(); }));
+toggles.forEach(([id, k]) => $('#' + id).addEventListener('change', e => { S[k] = e.target.checked; saveSettings(); if (!$('#prompter').hidden) { applyLook(); if (k === 'said' && !S.said) clearSaid(); } }));
+function openSettings() { fillSettings(); $('#settings').hidden = false; checkPersist(); }
+$('#libSettingsBtn').addEventListener('click', openSettings);
+$('#prSettingsBtn').addEventListener('click', () => { if (P.running) stopRun(); openSettings(); });
+$('#setClose').addEventListener('click', () => $('#settings').hidden = true);
+$('#settings').addEventListener('click', e => { if (e.target.id === 'settings') $('#settings').hidden = true; });
+
+function appURL() { return location.origin + location.pathname; }
+function claudeSetupText() {
+  return `TELEPROMPTER LINKS: When I say "send this to my teleprompter" (or "teleprompter link"), use your code tool to run this Python with the script, then reply with only a tappable markdown link titled "Open in Prompter: <title>".
+
+import json, zlib, base64
+title = "<short script title>"
+folder = ""  # optional folder name
+md = """<the full script in markdown, exactly as written>"""
+raw = json.dumps({"t": title, "f": folder, "md": md}, ensure_ascii=False).encode()
+c = zlib.compressobj(9, zlib.DEFLATED, -15)
+z = c.compress(raw) + c.flush()
+print("${appURL()}#s=2." + base64.urlsafe_b64encode(z).decode().rstrip("="))
+
+Keep all bold, italics, headings, lists and cues like [PAUSE] exactly as in the script. Do not change the wording.`;
+}
+$('#copySetup').addEventListener('click', async () => {
+  const t = claudeSetupText();
+  try { await navigator.clipboard.writeText(t); toast('Setup copied. Paste it into Claude.'); }
+  catch (e) { const r = document.createRange(); r.selectNodeContents($('#claudeSetup')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Text selected. Tap Copy.'); }
+});
+$('#testLink').addEventListener('click', async () => {
+  const p = await encodePayload({ t: 'Sample: Whiplash Myth', f: 'Samples', md: '# The Whiplash Myth\n\nMost people think whiplash is **just a sore neck**. [PAUSE]\n\nHere is the truth. The ligaments that hold your spine together can *stretch and tear* in a crash as slow as 8 miles per hour. ((look at camera))\n\n## 3 signs to watch for\n\n1. Headaches that start at the base of your skull\n2. Pain that gets worse a few days later\n3. A neck that feels ==loose or unstable==\n\nIf that sounds like you, call us today.' });
+  $('#settings').hidden = true;
+  location.hash = 's=' + p;
+});
+async function checkPersist() {
+  const o = $('#oPersist');
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      let p = await navigator.storage.persisted(); if (!p) p = await navigator.storage.persist();
+      o.textContent = p ? 'Protected' : 'Standard'; o.style.color = p ? 'var(--good)' : 'var(--accent)';
+    } else o.textContent = 'Standard';
+  } catch (e) { o.textContent = 'Standard'; }
+}
+
+/* ================= Boot ================= */
+(async function boot() {
+  await Store.open();
+  await refreshLibrary();
+  await checkHash();
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
