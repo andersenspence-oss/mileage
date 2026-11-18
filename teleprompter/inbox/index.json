@@ -1,6 +1,12 @@
 {
  "packs": [
   {
+   "id": "11th-hour-water-plan-breaks",
+   "name": "11th Hour: FEMA Says 1 Gallon a Day",
+   "note": "Water plan re-record (breaking point version)",
+   "file": "11th-hour-water-plan-breaks.json"
+  },
+  {
    "id": "11th-hour-nov17-fire-drill",
    "name": "11th Hour: Nov 17 Was a Fire Drill",
    "note": "Prepping video, record Wed Nov 18",
