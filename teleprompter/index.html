@@ -60,6 +60,17 @@ button{cursor:pointer}
 .toolrow{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center}
 .search{flex:1 1 220px;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--panel);padding:0 14px}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.tabs{display:flex;gap:6px;margin-top:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;border-bottom:1px solid var(--line);scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;min-height:46px;padding:0 18px;border:0;border-bottom:3px solid transparent;background:transparent;font-family:var(--disp);font-size:17px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.tab .n{margin-left:6px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.meta .proj{color:var(--fg);font-weight:600}
+.card.todo{border:2px solid #2fd47a;background:linear-gradient(180deg,rgba(47,212,122,.13),var(--panel) 60%)}
+.todobadge{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:#2fd47a;color:#04170c;font-family:var(--disp);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.donebadge{align-self:flex-start;font-size:13px;color:var(--muted)}
+.tab .todo{margin-left:6px;display:inline-block;min-width:20px;padding:1px 6px;border-radius:999px;background:#2fd47a;color:#04170c;font-size:12px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+#edProject{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--panel);padding:0 12px;font-size:15px}
 .chip{min-height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:transparent;font-size:15px}
 .chip[aria-pressed="true"]{background:var(--fg);color:#000;border-color:var(--fg)}
 #libList{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding-top:18px;padding-bottom:max(30px,env(safe-area-inset-bottom))}
@@ -202,6 +213,7 @@ button{cursor:pointer}
         </select>
       </div>
       <div id="inbox" hidden></div>
+      <div class="tabs" id="projTabs" role="tablist" aria-label="Projects"></div>
       <div class="chips" id="folderChips"></div>
     </div>
   </header>
@@ -215,6 +227,7 @@ button{cursor:pointer}
       <div class="edrow">
         <button class="btn icon ghost" id="edBack" aria-label="Back to library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
         <input id="edTitle" placeholder="Script title" autocomplete="off">
+        <select id="edProject" aria-label="Project"></select>
         <input id="edFolder" placeholder="Folder (optional)" list="folderList" autocomplete="off">
         <datalist id="folderList"></datalist>
         <button class="btn primary" id="edPrompt"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>Prompt</button>
@@ -554,43 +567,70 @@ async function encodePayload(obj) {
 
 /* ================= Library ================= */
 let scripts = [], filterFolder = '', confirmId = null;
+/* Project tabs */
+const PROJECTS = [
+  { id: '11h', name: '11th Hour', re: /11th|eleventh|prep/i },
+  { id: 'wcu', name: 'WCU', re: /\bwcu\b|whiplash/i },
+  { id: 'tpa', name: 'TPA', re: /\btpa\b|posture/i },
+  { id: 'piw', name: 'PIW', re: /\bpiw\b|pi ?warrior|crash ?101/i },
+  { id: 'rwu', name: 'Running Wild Utah', re: /\brwu\b|running wild/i }
+];
+function projName(id) { const p = PROJECTS.find(x => x.id === id); return p ? p.name : ''; }
+function inferProject(...hints) {
+  for (const h of hints) { if (!h) continue; const t = String(h).trim(); const byId = PROJECTS.find(p => p.id === t.toLowerCase() || p.name.toLowerCase() === t.toLowerCase()); if (byId) return byId.id; const m = PROJECTS.find(p => p.re.test(t)); if (m) return m.id; }
+  return '';
+}
+function projOf(s) { return s.project !== undefined ? s.project : inferProject(s.folder, s.title); }
+let activeTab = (() => { try { return localStorage.getItem('prompter.tab') || ''; } catch (e) { return ''; } })();
+function setTab(t) { activeTab = t; filterFolder = ''; try { localStorage.setItem('prompter.tab', t); } catch (e) {} renderLibrary(); }
+function inTab(s) { return !activeTab || (activeTab === 'none' ? !projOf(s) : projOf(s) === activeTab); }
+async function migrateProjects() {
+  for (const s of scripts) { let ch = false; if (s.project === undefined) { s.project = inferProject(s.folder, s.title); ch = true; } if (s.recorded === undefined) { s.recorded = !!s.used; ch = true; } if (ch) await Store.put(s); }
+}
 async function refreshLibrary() {
   scripts = await Store.all();
+  await migrateProjects();
   renderLibrary();
 }
-function folders() { return [...new Set(scripts.map(s => (s.folder || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
+function folders(all) { return [...new Set((all ? scripts : scripts.filter(inTab)).map(s => (s.folder || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
 function renderLibrary() {
   const q = $('#search').value.trim().toLowerCase();
   const sort = $('#sortSel').value;
-  let list = scripts.filter(s => (!filterFolder || (s.folder || '') === filterFolder) && (!q || s.title.toLowerCase().includes(q) || (s.text || '').toLowerCase().includes(q)));
-  list.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'used' ? (b.used || 0) - (a.used || 0) : (b.updated || 0) - (a.updated || 0));
+  let list = scripts.filter(s => inTab(s) && (!filterFolder || (s.folder || '') === filterFolder) && (!q || s.title.toLowerCase().includes(q) || (s.text || '').toLowerCase().includes(q)));
+  list.sort((a, b) => (!!a.recorded - !!b.recorded) || (sort === 'title' ? a.title.localeCompare(b.title) : sort === 'used' ? (b.used || 0) - (a.used || 0) : (b.updated || 0) - (a.updated || 0)));
+  const unsorted = scripts.filter(s => !projOf(s)).length;
+  if (activeTab === 'none' && !unsorted) activeTab = '';
+  const tabs = [{ id: '', name: 'All' }, ...PROJECTS].concat(unsorted ? [{ id: 'none', name: 'Unsorted' }] : []);
+  $('#projTabs').innerHTML = tabs.map(t => { const n = t.id === '' ? scripts.length : t.id === 'none' ? unsorted : scripts.filter(s => projOf(s) === t.id).length; const todo = scripts.filter(s => !s.recorded && (t.id === '' || (t.id === 'none' ? !projOf(s) : projOf(s) === t.id))).length; return `<button class="tab" role="tab" data-t="${t.id}" aria-selected="${t.id === activeTab}">${escHTML(t.name)}<span class="n">${n}</span>${todo ? `<span class="todo" title="${todo} to record">${todo}</span>` : ''}</button>`; }).join('');
   const fs = folders();
-  $('#folderChips').innerHTML = fs.length ? ['', ...fs].map(f => `<button class="chip" data-f="${escHTML(f)}" aria-pressed="${f === filterFolder}">${f ? escHTML(f) : 'All scripts'}</button>`).join('') : '';
-  $('#folderList').innerHTML = fs.map(f => `<option value="${escHTML(f)}">`).join('');
+  $('#folderChips').innerHTML = fs.length > 1 ? ['', ...fs].map(f => `<button class="chip" data-f="${escHTML(f)}" aria-pressed="${f === filterFolder}">${f ? escHTML(f) : 'All folders'}</button>`).join('') : '';
+  $('#folderList').innerHTML = folders(true).map(f => `<option value="${escHTML(f)}">`).join('');
   const g = $('#grid');
   if (!scripts.length) {
     g.innerHTML = `<div class="empty"><p><b>No scripts yet.</b></p><p>Tap <b>Paste script</b> after copying from Google Docs or Claude, tap <b>Import file</b> for a .docx, .txt or .md file, or tap a <b>Send to teleprompter</b> link from Claude.</p><p>Formatting comes across exactly: bold, italics, underline, headings, lists, highlights and colored text.</p></div>`;
     return;
   }
-  if (!list.length) { g.innerHTML = `<div class="empty">No scripts match.</div>`; return; }
+  if (!list.length) { g.innerHTML = `<div class="empty">${activeTab && activeTab !== 'none' && !q ? 'No ' + escHTML(projName(activeTab)) + ' scripts yet. Tap <b>New script</b> or import one and it lands here.' : 'No scripts match.'}</div>`; return; }
   g.innerHTML = list.map(s => {
     const wc = s.words || 0, mins = wc / S.wpm;
     const d = new Date(s.updated || Date.now());
     const confirming = confirmId === s.id;
-    return `<article class="card" data-id="${s.id}">
+    return `<article class="card${s.recorded ? '' : ' todo'}" data-id="${s.id}">
+      ${s.recorded ? '' : '<span class="todobadge">Needs recording</span>'}
       <h2>${escHTML(s.title)}</h2>
       <div class="snip">${escHTML((s.text || '').slice(0, 240))}</div>
-      <div class="meta">${s.folder ? `<span class="folder">${escHTML(s.folder)}</span>` : ''}<span>${wc} words</span><span>about ${fmtTime(mins * 60)}</span><span>${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></div>
+      <div class="meta">${!activeTab && projOf(s) ? `<span class="proj">${escHTML(projName(projOf(s)))}</span>` : ''}${s.folder ? `<span class="folder">${escHTML(s.folder)}</span>` : ''}<span>${wc} words</span><span>about ${fmtTime(mins * 60)}</span><span>${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></div>
       <div class="cardbtns">${confirming
         ? `<button class="btn danger" data-act="reallydel">Delete for good</button><button class="btn ghost" data-act="canceldel">Keep it</button>`
-        : `<button class="btn primary" data-act="prompt"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>Prompt</button><button class="btn" data-act="edit">Edit</button><button class="btn ghost" data-act="dup">Copy</button><button class="btn ghost" data-act="del">Delete</button>`}</div>
+        : `<button class="btn primary" data-act="prompt"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>Prompt</button><button class="btn" data-act="edit">Edit</button><button class="btn ghost" data-act="rec">${s.recorded ? 'Mark not recorded' : 'Mark recorded'}</button><button class="btn ghost" data-act="dup">Copy</button><button class="btn ghost" data-act="del">Delete</button>`}</div>
     </article>`;
   }).join('');
 }
-async function saveNewScript(html, title, folder) {
+async function saveNewScript(html, title, folder, project) {
   const clean = sanitizeHTML(html);
   const now = Date.now();
-  const s = { id: uid(), title: title || guessTitle(clean), folder: folder || filterFolder || '', html: clean, text: htmlToText(clean), words: wordCount(clean), created: now, updated: now, used: 0 };
+  const proj = inferProject(project, folder) || (activeTab !== 'none' ? activeTab : '');
+  const s = { id: uid(), title: title || guessTitle(clean), folder: folder || filterFolder || '', project: proj, recorded: false, html: clean, text: htmlToText(clean), words: wordCount(clean), created: now, updated: now, used: 0 };
   await Store.put(s); scripts.push(s); renderLibrary(); return s;
 }
 $('#grid').addEventListener('click', async e => {
@@ -599,11 +639,13 @@ $('#grid').addEventListener('click', async e => {
   const a = b.dataset.act;
   if (a === 'prompt') openPrompter(s);
   else if (a === 'edit') openEditor(s);
-  else if (a === 'dup') { const c = Object.assign({}, s, { id: uid(), title: s.title + ' (copy)', updated: Date.now(), created: Date.now() }); await Store.put(c); scripts.push(c); renderLibrary(); toast('Copied'); }
+  else if (a === 'rec') { s.recorded = !s.recorded; await Store.put(s); renderLibrary(); toast(s.recorded ? 'Marked recorded' : 'Back on the to-record list'); }
+  else if (a === 'dup') { const c = Object.assign({}, s, { id: uid(), recorded: false, title: s.title + ' (copy)', updated: Date.now(), created: Date.now() }); await Store.put(c); scripts.push(c); renderLibrary(); toast('Copied'); }
   else if (a === 'del') { confirmId = id; renderLibrary(); }
   else if (a === 'canceldel') { confirmId = null; renderLibrary(); }
   else if (a === 'reallydel') { await Store.del(id); scripts = scripts.filter(x => x.id !== id); confirmId = null; renderLibrary(); toast('Deleted'); }
 });
+$('#projTabs').addEventListener('click', e => { const t = e.target.closest('.tab'); if (!t) return; setTab(t.dataset.t); });
 $('#folderChips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; filterFolder = c.dataset.f; renderLibrary(); });
 $('#search').addEventListener('input', renderLibrary);
 $('#sortSel').addEventListener('change', renderLibrary);
@@ -702,7 +744,7 @@ async function importPayload(p) {
         const h = one.html ? one.html : md2html(one.md || one.text || '');
         const c = sanitizeHTML(h);
         if (scripts.some(x => x.html === c)) { skipped++; continue; }
-        await saveNewScript(h, one.t || one.title, one.f || one.folder); added++;
+        await saveNewScript(h, one.t || one.title, one.f || one.folder, one.p || one.project); added++;
       }
       showView('library'); renderLibrary();
       toast(`Imported ${added} script${added === 1 ? '' : 's'} from Claude` + (skipped ? `. ${skipped} already in your library.` : ''), 4000);
@@ -712,7 +754,7 @@ async function importPayload(p) {
     const clean = sanitizeHTML(html);
     const existing = scripts.find(s => s.html === clean);
     if (existing) { toast('Already in your library: ' + existing.title); openEditor(existing); return; }
-    const s = await saveNewScript(html, d.t || d.title, d.f || d.folder);
+    const s = await saveNewScript(html, d.t || d.title, d.f || d.folder, d.p || d.project);
     toast('Imported from Claude: ' + s.title, 3500);
     openEditor(s);
   } catch (e) { toast('That import link is damaged. Ask Claude to make it again.', 4000); }
@@ -754,10 +796,10 @@ $('#inbox').addEventListener('click', async e => {
     for (const one of d.scripts || []) {
       const h = one.html ? one.html : md2html(one.md || one.text || '');
       if (scripts.some(x => x.html === sanitizeHTML(h))) { skipped++; continue; }
-      await saveNewScript(h, one.t, one.f); added++;
+      await saveNewScript(h, one.t, one.f, one.p || pack.p); added++;
     }
     markInboxDone(id); inboxPacks = inboxPacks.filter(p => p.id !== id); renderInbox();
-    if (d.scripts && d.scripts[0] && d.scripts[0].f) { filterFolder = d.scripts[0].f; $('#sortSel').value = 'title'; renderLibrary(); }
+    if (d.scripts && d.scripts[0]) { const f0 = d.scripts[0]; setTab(inferProject(f0.p || pack.p, f0.f)); if (f0.f) filterFolder = f0.f; $('#sortSel').value = 'title'; renderLibrary(); }
     toast(`Imported ${added} script${added === 1 ? '' : 's'}` + (skipped ? `. ${skipped} were already here.` : ''), 4000);
   } catch (err) { b.disabled = false; b.textContent = 'Import'; toast('Could not download the scripts. Check your internet and try again.', 4000); }
 });
@@ -769,6 +811,7 @@ function showView(id) { ['library', 'editor', 'prompter'].forEach(v => $('#' + v
 function openEditor(s, focus) {
   edScript = s; showView('editor');
   $('#edTitle').value = s.title; $('#edFolder').value = s.folder || '';
+  $('#edProject').innerHTML = '<option value="">No project</option>' + PROJECTS.map(p => `<option value="${p.id}">${escHTML(p.name)}</option>`).join(''); $('#edProject').value = projOf(s);
   $('#edBody').innerHTML = s.html || '<p><br></p>';
   $('#edBody').style.fontFamily = `"${S.font}",var(--ui)`;
   updateEdStats(); $('#edSaved').textContent = 'Saved';
@@ -779,12 +822,13 @@ function scheduleSave() { $('#edSaved').textContent = 'Saving'; clearTimeout(edT
 async function saveEditor() {
   clearTimeout(edTimer); if (!edScript) return;
   const html = $('#edBody').innerHTML;
-  Object.assign(edScript, { title: $('#edTitle').value.trim() || 'Untitled script', folder: $('#edFolder').value.trim(), html, text: htmlToText(html), words: wordCount(html), updated: Date.now() });
+  Object.assign(edScript, { title: $('#edTitle').value.trim() || 'Untitled script', folder: $('#edFolder').value.trim(), project: $('#edProject').value, html, text: htmlToText(html), words: wordCount(html), updated: Date.now() });
   await Store.put(edScript); $('#edSaved').textContent = 'Saved'; updateEdStats();
 }
 $('#edBody').addEventListener('input', scheduleSave);
 $('#edTitle').addEventListener('input', scheduleSave);
 $('#edFolder').addEventListener('input', scheduleSave);
+$('#edProject').addEventListener('change', scheduleSave);
 $('#edBody').addEventListener('paste', e => { handlePasteEvent(e, 'editor'); scheduleSave(); });
 $('#edBack').addEventListener('click', async () => { await saveEditor(); edScript = null; showView('library'); renderLibrary(); });
 $('#edPrompt').addEventListener('click', async () => { await saveEditor(); openPrompter(edScript); });
@@ -924,6 +968,7 @@ function openPrompter(s) {
   cancelAnimationFrame(P.frameId); P.lastT = performance.now(); P.frameId = requestAnimationFrame(frame);
 }
 async function closePrompter() {
+  if (P.s && !P.s.recorded && P.maxPos && P.pos >= P.maxPos * 0.9) { P.s.recorded = true; Store.put(P.s); toast('Marked recorded: ' + P.s.title, 3000); }
   stopRun(); stopMic(); stopRec(); releaseWake();
   cancelAnimationFrame(P.frameId);
   if (document.fullscreenElement || document.webkitFullscreenElement) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {} }
