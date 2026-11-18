@@ -1,6 +1,12 @@
 {
  "packs": [
   {
+   "id": "11th-hour-nov17-fire-drill",
+   "name": "11th Hour: Nov 17 Was a Fire Drill",
+   "note": "Prepping video, record Wed Nov 18",
+   "file": "11th-hour-nov17-fire-drill.json"
+  },
+  {
    "id": "short-stack-10-28-26",
    "name": "Short Stack 10.28.26",
    "note": "20 WCU shorts, Dec 11 to Dec 30",
